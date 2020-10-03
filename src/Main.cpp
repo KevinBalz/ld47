@@ -3,7 +3,7 @@
 
 static Game game;
 
-void tako::Setup(tako::PixelArtDrawer* drawer)
+void tako::Setup(tako::PixelArtDrawer* drawer, Resources* resources)
 {
     game.Setup(drawer);
 }
