@@ -5,7 +5,7 @@ static Game game;
 
 void tako::Setup(tako::PixelArtDrawer* drawer, Resources* resources)
 {
-    game.Setup(drawer);
+    game.Setup(drawer, resources);
 }
 
 void tako::Update(tako::Input* input, float dt)

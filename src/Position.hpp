@@ -24,4 +24,11 @@ struct Position
         y -= rhs.y;
         return AsVec();
     }
+
+    Position& operator=(const tako::Vector2& rhs)
+    {
+        x = rhs.x;
+        y = rhs.y;
+        return *this;
+    }
 };

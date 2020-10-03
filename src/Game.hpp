@@ -40,7 +40,7 @@ void RerenderText(Text& tex, tako::PixelArtDrawer* drawer, tako::Font* font, std
 class Game
 {
 public:
-    void Setup(tako::PixelArtDrawer* drawer)
+    void Setup(tako::PixelArtDrawer* drawer, tako::Resources* resources)
     {
         m_drawer = drawer;
         drawer->SetTargetSize(240, 135);
@@ -48,6 +48,10 @@ public:
 
         m_font = new tako::Font("/charmap-cellphone.png", 5, 7, 1, 1, 2, 2,
                                 " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]\a_`abcdefghijklmnopqrstuvwxyz{|}~");
+
+        m_groundTexture = resources->Load<tako::Texture>("/Ground.png");
+        m_tiledTexture = resources->Load<tako::Texture>("/Tiled.png");
+        m_plantedTexture = resources->Load<tako::Texture>("/Planted.png");
 
         InitGame();
     }
@@ -61,8 +65,7 @@ public:
         {
             auto player = m_world.Create<Position, RectangleRenderer, Player, RigidBody, Foreground, Camera>();
             Position& pos = m_world.GetComponent<Position>(player);
-            pos.x = 0;
-            pos.y = 0;
+            pos = m_playerSpawn;
             RigidBody& rigid = m_world.GetComponent<RigidBody>(player);
             rigid.size = { 16, 16 };
             rigid.entity = player;
@@ -121,10 +124,15 @@ public:
             {
                 for (auto [cPos, crop] : m_world.Iter<Position, Crop>())
                 {
-                    LOG("{} {} {}", (cPos.AsVec() - pos.AsVec()).x, (cPos.AsVec() - pos.AsVec()).y, (cPos.AsVec() - pos.AsVec()).magnitude());
+                    if (crop.watered)
+                    {
+                        continue;
+                    }
+
                     if (tako::mathf::abs((cPos.AsVec() - pos.AsVec()).magnitude()) < 20)
                     {
                         crop.watered = true;
+                        break;
                     }
                 }
             }
@@ -177,6 +185,10 @@ public:
             RerenderText(m_currentDayText, m_drawer, m_font, "Day " + std::to_string(m_currentDay));
 
         }
+        for (auto [pos, player]: m_world.Iter<Position, Player>())
+        {
+            pos = m_playerSpawn;
+        }
         m_dayTimeLeft = DAY_LENGTH;
     }
 
@@ -186,10 +198,19 @@ public:
         auto cameraSize = drawer->GetCameraViewSize();
         drawer->SetClearColor({255, 255, 255, 255});
         drawer->Clear();
+
         m_world.IterateComps<Position, Camera>([&](Position& pos, Camera& player)
         {
-            drawer->SetCameraPosition(pos.AsVec());
+           drawer->SetCameraPosition(pos.AsVec());
         });
+        //Render map
+        for (int x = -16; x < 16; x++)
+        {
+            for (int y = -16; y < 16; y++)
+            {
+                drawer->DrawImage(x * 16, y * 16, 16, 16, y % 3 == 0 ? m_plantedTexture: m_tiledTexture);
+            }
+        }
 
         m_world.IterateComps<Position, RectangleRenderer, Background>([&](Position& pos, RectangleRenderer& rect, Background& b)
         {
@@ -221,7 +242,11 @@ private:
     float m_dayTimeLeft;
     Text m_currentDayText;
     Text m_dayTimeLeftText;
+    tako::Vector2 m_playerSpawn = {0, 0};
     tako::Font* m_font;
     tako::World m_world;
+    tako::Texture* m_groundTexture;
+    tako::Texture* m_tiledTexture;
+    tako::Texture* m_plantedTexture;
     tako::PixelArtDrawer* m_drawer;
 };
