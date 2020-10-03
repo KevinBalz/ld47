@@ -7,6 +7,8 @@ struct Crop
 {
     int stage;
     bool watered;
-    std::array<int, TOTAL_DAYS> stageHistory;
+    int tileX;
+    int tileY;
+    std::array<int, TOTAL_DAYS + 1> stageHistory;
 };
 

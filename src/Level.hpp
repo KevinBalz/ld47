@@ -7,7 +7,7 @@
 
 namespace
 {
-    constexpr auto tilesetTileCount = 2;
+    constexpr auto tilesetTileCount = 4;
 }
 
 struct Tile
@@ -75,19 +75,20 @@ public:
                     tile.index = 1;
                     break;
                 case 'S':
-                    tile.index = 2;
+                    tile.index = 1;
+                    break;
+                case 'C':
+                    tile.index = 3;
                     break;
             }
 
+            m_tiles.push_back(tile);
             if (callbackMap.find(tileChars[i]) != callbackMap.end())
             {
                 int y = m_height - i / m_width;
                 int x = i % m_width;
                 callbackMap[tileChars[i]](x, y);
             }
-
-
-            m_tiles.push_back(tile);
         }
     }
 
@@ -139,6 +140,10 @@ public:
             if (tile.index == 2)
             {
                 tile.index = 1;
+            }
+            else if (tile.index == 4)
+            {
+                tile.index = 3;
             }
         }
     }

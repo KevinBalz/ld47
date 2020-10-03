@@ -60,19 +60,17 @@ public:
 
     void InitGame()
     {
-        m_currentDay = 1;
-        m_currentDayText = CreateText(m_drawer, m_font, "Day " + std::to_string(m_currentDay));
-        m_dayTimeLeft = DAY_LENGTH;
-        m_dayTimeLeftText = CreateText(m_drawer, m_font, std::to_string(m_dayTimeLeft));
-
-        CreateCrop(32, 32);
-        CreateCrop(48, 32);
+        m_currentDay = 0;
 
         std::map<char, std::function<void(int,int)>> levelCallbacks
         {{
             {'S', [&](int x, int y)
             {
                 m_playerSpawn = tako::Vector2(x * 16 + 8, y * 16 + 8);
+            }},
+            {'C', [&](int x, int y)
+            {
+                CreateCrop(x, y);
             }},
         }};
         m_level.LoadLevel("/Level.txt", levelCallbacks);
@@ -87,25 +85,35 @@ public:
             RectangleRenderer& renderer = m_world.GetComponent<RectangleRenderer>(player);
             renderer.size = { 16, 16};
             renderer.color = {0, 0, 0, 255};
+            Player& play = m_world.GetComponent<Player>(player);
+            play.facing = { 0, -1 };
         }
+        m_currentDay = 1;
+        m_currentDayText = CreateText(m_drawer, m_font, "Day " + std::to_string(m_currentDay));
+        m_dayTimeLeft = DAY_LENGTH;
+        m_dayTimeLeftText = CreateText(m_drawer, m_font, std::to_string(m_dayTimeLeft));
     }
 
-    void CreateCrop(int x, int y)
+    tako::Entity CreateCrop(int x, int y)
     {
-        auto crop = m_world.Create<Position, RectangleRenderer, Crop, RigidBody, Background>();
+        auto crop = m_world.Create<Position, Crop, Background>();
         Position& pos = m_world.GetComponent<Position>(crop);
-        pos.x = x;
-        pos.y = y;
+        pos.x = x * 16 + 8;
+        pos.y = y * 16 + 8;
         Crop& cr = m_world.GetComponent<Crop>(crop);
         cr.stage = 1;
         cr.watered = false;
-        cr.stageHistory[m_currentDay - 1] = cr.stage;
-        RigidBody& rigid = m_world.GetComponent<RigidBody>(crop);
-        rigid.size = { 16, 16 };
-        rigid.entity = crop;
-        RectangleRenderer& renderer = m_world.GetComponent<RectangleRenderer>(crop);
-        renderer.size = { 16, 16};
-        renderer.color = {128, 0, 0, 255};
+        cr.stageHistory[m_currentDay] = cr.stage;
+        for (int i = 0; i < m_currentDay; i++)
+        {
+            cr.stageHistory[i] = 0;
+        }
+
+        cr.tileX = x;
+        cr.tileY = y;
+        m_level.GetTile(x, y).value()->index = 3;
+
+        return crop;
     }
 
 
@@ -130,8 +138,14 @@ public:
             {
                 moveVector.y -= 1;
             }
-            //moveVector.normalize();
-            //pos += moveVector * dt * 40;
+            if (moveVector.magnitude() > 1)
+            {
+                moveVector.normalize();
+            }
+            else if (moveVector.magnitude() > 0)
+            {
+                player.facing = tako::Vector2::Normalized(moveVector);
+            }
             Physics::Move(m_world, pos, rigid, moveVector * dt * 20);
             if (input->GetKeyDown(tako::Key::L))
             {
@@ -148,27 +162,33 @@ public:
                         break;
                     }
                 }
-                int tileX = ((int) pos.x) / 16;
-                int tileY = ((int) pos.y) / 16;
+                int tileX = ((int) pos.x + player.facing.x * 12) / 16;
+                int tileY = ((int) pos.y + player.facing.y * 12) / 16;
                 auto tileOpt = m_level.GetTile(tileX, tileY);
                 if (tileOpt)
                 {
                     auto tile = tileOpt.value();
                     if (tile->index == 1)
                     {
-                        tile->index = 2;
+                        //tile->index = 2;
+                        CreateCrop(tileX, tileY);
+                    }
+                    else
+                    {
+                        m_world.IterateComps<Crop>([&](Crop& crop)
+                        {
+                            if (crop.tileX != tileX || crop.tileY != tileY)
+                            {
+                                return;
+                            }
+                            crop.watered = true;
+                            tile->index = 4;
+                        });
                     }
                 }
             }
         });
 
-
-
-        for (auto [renderer, crop] : m_world.Iter<RectangleRenderer, Crop>())
-        {
-            renderer.color = crop.watered ? tako::Color(0, 0, 255, 255) : tako::Color(255, 0, 0, 255);
-            renderer.size = tako::Vector2(crop.stage * 4, crop.stage * 4);
-        }
 
         m_dayTimeLeft -= dt;
         if (m_dayTimeLeft <= 0)
@@ -185,14 +205,13 @@ public:
             return;
         }
         bool allWatered = true;
-        for (auto [crop] : m_world.Iter<Crop>())
+        m_world.IterateComps<Crop>([&](Crop& crop)
         {
             if (!crop.watered)
             {
                 allWatered = false;
-                break;
             }
-        }
+        });
         m_world.IterateHandle<Crop>([&](tako::EntityHandle handle)
         {
             Crop& crop = m_world.GetComponent<Crop>(handle.id);
@@ -201,12 +220,33 @@ public:
                 crop.stage++;
                 crop.stageHistory[m_currentDay] = crop.stage;
             }
+            else
+            {
+                crop.stage = crop.stageHistory[m_currentDay - 1];
+            }
             crop.watered = false;
         });
         if (allWatered)
         {
             m_currentDay++;
             RerenderText(m_currentDayText, m_drawer, m_font, "Day " + std::to_string(m_currentDay));
+        }
+        else
+        {
+            std::vector<tako::Entity> clearCrop;
+            m_world.IterateHandle<Crop>([&](tako::EntityHandle handle)
+            {
+                Crop& crop = m_world.GetComponent<Crop>(handle.id);
+                if (crop.stage == 0)
+                {
+                    clearCrop.push_back(handle.id);
+                    m_level.GetTile(crop.tileX, crop.tileY).value()->index = 1;
+                }
+            });
+            for (auto ent : clearCrop)
+            {
+                m_world.Delete(ent);
+            }
         }
         m_level.ResetWatered();
         for (auto [pos, player]: m_world.Iter<Position, Player>())
