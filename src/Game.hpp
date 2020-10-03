@@ -5,6 +5,7 @@
 #include "Position.hpp"
 #include "Renderer.hpp"
 #include "Player.hpp"
+#include "Physics.hpp"
 
 struct Text
 {
@@ -40,19 +41,25 @@ public:
     void InitGame()
     {
         {
-            auto player = m_world.Create<Position, RectangleRenderer, Player, Foreground, Camera>();
+            auto player = m_world.Create<Position, RectangleRenderer, Player, RigidBody, Foreground, Camera>();
             Position& pos = m_world.GetComponent<Position>(player);
             pos.x = 0;
             pos.y = 0;
+            RigidBody& rigid = m_world.GetComponent<RigidBody>(player);
+            rigid.size = { 16, 16 };
+            rigid.entity = player;
             RectangleRenderer& renderer = m_world.GetComponent<RectangleRenderer>(player);
             renderer.size = { 16, 16};
             renderer.color = {0, 0, 0, 255};
         }
         {
-            auto asdf = m_world.Create<Position, RectangleRenderer, Background>();
+            auto asdf = m_world.Create<Position, RectangleRenderer, RigidBody, Background>();
             Position& pos = m_world.GetComponent<Position>(asdf);
-            pos.x = 0;
-            pos.y = 0;
+            pos.x = 44;
+            pos.y = 44;
+            RigidBody& rigid = m_world.GetComponent<RigidBody>(asdf);
+            rigid.size = { 16, 16 };
+            rigid.entity = asdf;
             RectangleRenderer& renderer = m_world.GetComponent<RectangleRenderer>(asdf);
             renderer.size = { 16, 16};
             renderer.color = {128, 0, 0, 255};
@@ -62,7 +69,7 @@ public:
 
     void Update(tako::Input* input, float dt)
     {
-        m_world.IterateComps<Position, Player>([&](Position& pos, Player& player)
+        m_world.IterateComps<Position, Player, RigidBody>([&](Position& pos, Player& player, RigidBody& rigid)
         {
             tako::Vector2 moveVector;
             if (input->GetKey(tako::Key::Left) || input->GetKey(tako::Key::A) || input->GetKey(tako::Key::Gamepad_Dpad_Left))
@@ -82,7 +89,8 @@ public:
                 moveVector.y -= 1;
             }
             //moveVector.normalize();
-            pos += moveVector * dt * 40;
+            //pos += moveVector * dt * 40;
+            Physics::Move(m_world, pos, rigid, moveVector * dt * 20);
         });
     }
 

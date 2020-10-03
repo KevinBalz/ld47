@@ -13,6 +13,7 @@ add_executable(${EXECUTABLE}
         "src/Position.hpp"
         "src/Rect.hpp"
         "src/Renderer.hpp"
+        "src/Physics.hpp"
 )
 configure_file("src/index.html" "./index.html")
 
