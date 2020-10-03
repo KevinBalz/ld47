@@ -1,0 +1,4 @@
+[submodule "dependencies/tako"]
+	path = dependencies/tako
+	url = https://github.com/KevinBalz/tako
+	branch = jam/ld47
