@@ -6,6 +6,9 @@
 #include "Renderer.hpp"
 #include "Player.hpp"
 #include "Physics.hpp"
+#include "Crop.hpp"
+
+constexpr auto DAY_LENGTH = 10.0f;
 
 struct Text
 {
@@ -26,6 +29,13 @@ Text CreateText(tako::PixelArtDrawer* drawer, tako::Font* font, std::string_view
     };
 }
 
+void RerenderText(Text& tex, tako::PixelArtDrawer* drawer, tako::Font* font, std::string_view text)
+{
+    auto bitmap = font->RenderText(text, 1);
+    drawer->UpdateTexture(tex.texture, bitmap);
+    tex.size = tako::Vector2(bitmap.Width(), bitmap.Height());
+}
+
 
 class Game
 {
@@ -35,11 +45,19 @@ public:
         m_drawer = drawer;
         drawer->SetTargetSize(240, 135);
         drawer->AutoScale();
+
+        m_font = new tako::Font("/charmap-cellphone.png", 5, 7, 1, 1, 2, 2,
+                                " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]\a_`abcdefghijklmnopqrstuvwxyz{|}~");
+
         InitGame();
     }
 
     void InitGame()
     {
+        m_currentDay = 1;
+        m_currentDayText = CreateText(m_drawer, m_font, "Day " + std::to_string(m_currentDay));
+        m_dayTimeLeft = DAY_LENGTH;
+        m_dayTimeLeftText = CreateText(m_drawer, m_font, std::to_string(m_dayTimeLeft));
         {
             auto player = m_world.Create<Position, RectangleRenderer, Player, RigidBody, Foreground, Camera>();
             Position& pos = m_world.GetComponent<Position>(player);
@@ -52,18 +70,26 @@ public:
             renderer.size = { 16, 16};
             renderer.color = {0, 0, 0, 255};
         }
-        {
-            auto asdf = m_world.Create<Position, RectangleRenderer, RigidBody, Background>();
-            Position& pos = m_world.GetComponent<Position>(asdf);
-            pos.x = 44;
-            pos.y = 44;
-            RigidBody& rigid = m_world.GetComponent<RigidBody>(asdf);
-            rigid.size = { 16, 16 };
-            rigid.entity = asdf;
-            RectangleRenderer& renderer = m_world.GetComponent<RectangleRenderer>(asdf);
-            renderer.size = { 16, 16};
-            renderer.color = {128, 0, 0, 255};
-        }
+        CreateCrop(32, 32);
+        CreateCrop(48, 32);
+    }
+
+    void CreateCrop(int x, int y)
+    {
+        auto crop = m_world.Create<Position, RectangleRenderer, Crop, RigidBody, Background>();
+        Position& pos = m_world.GetComponent<Position>(crop);
+        pos.x = x;
+        pos.y = y;
+        Crop& cr = m_world.GetComponent<Crop>(crop);
+        cr.stage = 1;
+        cr.watered = true;
+        cr.stageHistory[m_currentDay - 1] = cr.stage;
+        RigidBody& rigid = m_world.GetComponent<RigidBody>(crop);
+        rigid.size = { 16, 16 };
+        rigid.entity = crop;
+        RectangleRenderer& renderer = m_world.GetComponent<RectangleRenderer>(crop);
+        renderer.size = { 16, 16};
+        renderer.color = {128, 0, 0, 255};
     }
 
 
@@ -92,11 +118,61 @@ public:
             //pos += moveVector * dt * 40;
             Physics::Move(m_world, pos, rigid, moveVector * dt * 20);
         });
+
+
+
+        for (auto [renderer, crop] : m_world.Iter<RectangleRenderer, Crop>())
+        {
+            renderer.color = crop.watered ? tako::Color(0, 0, 255, 255) : tako::Color(255, 0, 0, 255);
+            renderer.size = tako::Vector2(crop.stage * 4, crop.stage * 4);
+        }
+
+        m_dayTimeLeft -= dt;
+        RerenderText(m_dayTimeLeftText, m_drawer, m_font, std::to_string(m_dayTimeLeft));
+        if (m_dayTimeLeft <= 0)
+        {
+            PassDay();
+        }
+    }
+
+    void PassDay()
+    {
+        if (m_currentDay == TOTAL_DAYS)
+        {
+            return;
+        }
+        bool allWatered = true;
+        for (auto [crop] : m_world.Iter<Crop>())
+        {
+            if (!crop.watered)
+            {
+                allWatered = false;
+                break;
+            }
+        }
+        m_world.IterateHandle<Crop>([&](tako::EntityHandle handle)
+        {
+            Crop& crop = m_world.GetComponent<Crop>(handle.id);
+            if (allWatered)
+            {
+                crop.stage++;
+                crop.stageHistory[m_currentDay] = crop.stage;
+            }
+            crop.watered = false;
+        });
+        if (allWatered)
+        {
+            m_currentDay++;
+            RerenderText(m_currentDayText, m_drawer, m_font, "Day " + std::to_string(m_currentDay));
+
+        }
+        m_dayTimeLeft = DAY_LENGTH;
     }
 
 
     void Draw(tako::PixelArtDrawer* drawer)
     {
+        auto cameraSize = drawer->GetCameraViewSize();
         drawer->SetClearColor({255, 255, 255, 255});
         drawer->Clear();
         m_world.IterateComps<Position, Camera>([&](Position& pos, Camera& player)
@@ -120,8 +196,21 @@ public:
         {
            drawer->DrawSprite(pos.x - sprite.size.x / 2, pos.y + sprite.size.y / 2, sprite.size.x, sprite.size.y, sprite.sprite);
         });
+
+        if (m_currentDay > 0)
+        {
+            drawer->SetCameraPosition(cameraSize / 2);
+            drawer->DrawImage(4, cameraSize.y - 4, m_currentDayText.size.x, m_currentDayText.size.y, m_currentDayText.texture, {0, 0, 0, 255});
+
+            drawer->DrawImage(4, cameraSize.y - 16, m_dayTimeLeftText.size.x, m_dayTimeLeftText.size.y, m_dayTimeLeftText.texture, {0, 0, 0, 255});
+        }
     }
 private:
+    int m_currentDay = 0;
+    float m_dayTimeLeft;
+    Text m_currentDayText;
+    Text m_dayTimeLeftText;
+    tako::Font* m_font;
     tako::World m_world;
     tako::PixelArtDrawer* m_drawer;
 };
