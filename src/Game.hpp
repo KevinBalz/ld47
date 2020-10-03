@@ -7,6 +7,7 @@
 #include "Player.hpp"
 #include "Physics.hpp"
 #include "Crop.hpp"
+#include "Level.hpp"
 
 constexpr auto DAY_LENGTH = 10.0f;
 
@@ -53,6 +54,7 @@ public:
         m_tiledTexture = resources->Load<tako::Texture>("/Tiled.png");
         m_plantedTexture = resources->Load<tako::Texture>("/Planted.png");
 
+        m_level.Init(drawer, resources);
         InitGame();
     }
 
@@ -62,6 +64,19 @@ public:
         m_currentDayText = CreateText(m_drawer, m_font, "Day " + std::to_string(m_currentDay));
         m_dayTimeLeft = DAY_LENGTH;
         m_dayTimeLeftText = CreateText(m_drawer, m_font, std::to_string(m_dayTimeLeft));
+
+        CreateCrop(32, 32);
+        CreateCrop(48, 32);
+
+        std::map<char, std::function<void(int,int)>> levelCallbacks
+        {{
+            {'S', [&](int x, int y)
+            {
+                m_playerSpawn = tako::Vector2(x * 16 + 8, y * 16 + 8);
+            }},
+        }};
+        m_level.LoadLevel("/Level.txt", levelCallbacks);
+
         {
             auto player = m_world.Create<Position, RectangleRenderer, Player, RigidBody, Foreground, Camera>();
             Position& pos = m_world.GetComponent<Position>(player);
@@ -73,8 +88,6 @@ public:
             renderer.size = { 16, 16};
             renderer.color = {0, 0, 0, 255};
         }
-        CreateCrop(32, 32);
-        CreateCrop(48, 32);
     }
 
     void CreateCrop(int x, int y)
@@ -135,6 +148,17 @@ public:
                         break;
                     }
                 }
+                int tileX = ((int) pos.x) / 16;
+                int tileY = ((int) pos.y) / 16;
+                auto tileOpt = m_level.GetTile(tileX, tileY);
+                if (tileOpt)
+                {
+                    auto tile = tileOpt.value();
+                    if (tile->index == 1)
+                    {
+                        tile->index = 2;
+                    }
+                }
             }
         });
 
@@ -183,8 +207,8 @@ public:
         {
             m_currentDay++;
             RerenderText(m_currentDayText, m_drawer, m_font, "Day " + std::to_string(m_currentDay));
-
         }
+        m_level.ResetWatered();
         for (auto [pos, player]: m_world.Iter<Position, Player>())
         {
             pos = m_playerSpawn;
@@ -204,6 +228,7 @@ public:
            drawer->SetCameraPosition(pos.AsVec());
         });
         //Render map
+        /*
         for (int x = -16; x < 16; x++)
         {
             for (int y = -16; y < 16; y++)
@@ -211,6 +236,8 @@ public:
                 drawer->DrawImage(x * 16, y * 16, 16, 16, y % 3 == 0 ? m_plantedTexture: m_tiledTexture);
             }
         }
+         */
+        m_level.Draw(drawer);
 
         m_world.IterateComps<Position, RectangleRenderer, Background>([&](Position& pos, RectangleRenderer& rect, Background& b)
         {
@@ -245,6 +272,7 @@ private:
     tako::Vector2 m_playerSpawn = {0, 0};
     tako::Font* m_font;
     tako::World m_world;
+    Level m_level;
     tako::Texture* m_groundTexture;
     tako::Texture* m_tiledTexture;
     tako::Texture* m_plantedTexture;
