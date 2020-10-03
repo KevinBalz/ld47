@@ -82,7 +82,7 @@ public:
         pos.y = y;
         Crop& cr = m_world.GetComponent<Crop>(crop);
         cr.stage = 1;
-        cr.watered = true;
+        cr.watered = false;
         cr.stageHistory[m_currentDay - 1] = cr.stage;
         RigidBody& rigid = m_world.GetComponent<RigidBody>(crop);
         rigid.size = { 16, 16 };
@@ -117,6 +117,17 @@ public:
             //moveVector.normalize();
             //pos += moveVector * dt * 40;
             Physics::Move(m_world, pos, rigid, moveVector * dt * 20);
+            if (input->GetKeyDown(tako::Key::L))
+            {
+                for (auto [cPos, crop] : m_world.Iter<Position, Crop>())
+                {
+                    LOG("{} {} {}", (cPos.AsVec() - pos.AsVec()).x, (cPos.AsVec() - pos.AsVec()).y, (cPos.AsVec() - pos.AsVec()).magnitude());
+                    if (tako::mathf::abs((cPos.AsVec() - pos.AsVec()).magnitude()) < 20)
+                    {
+                        crop.watered = true;
+                    }
+                }
+            }
         });
 
 
@@ -128,11 +139,11 @@ public:
         }
 
         m_dayTimeLeft -= dt;
-        RerenderText(m_dayTimeLeftText, m_drawer, m_font, std::to_string(m_dayTimeLeft));
         if (m_dayTimeLeft <= 0)
         {
             PassDay();
         }
+        RerenderText(m_dayTimeLeftText, m_drawer, m_font, std::to_string(m_dayTimeLeft));
     }
 
     void PassDay()
