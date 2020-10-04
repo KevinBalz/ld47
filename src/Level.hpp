@@ -7,7 +7,7 @@
 
 namespace
 {
-    constexpr auto tilesetTileCount = 6;
+    constexpr auto tilesetTileCount = 16;
 }
 
 struct Tile
@@ -75,13 +75,13 @@ public:
                     tile.index = 1;
                     break;
                 case 'S':
-                    tile.index = 5;
+                    tile.index = 11;
                     break;
                 case 'C':
                     tile.index = 3;
                     break;
                 case 'G':
-                    tile.index = 5;
+                    tile.index = 11;
                     break;
             }
 
@@ -140,13 +140,9 @@ public:
     {
         for (auto& tile : m_tiles)
         {
-            if (tile.index == 2)
+            if (tile.index >= 1 && tile.index <= 10)
             {
-                tile.index = 1;
-            }
-            else if (tile.index == 4)
-            {
-                tile.index = 3;
+                tile.index += tile.index % 2 - 1;
             }
         }
     }

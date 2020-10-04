@@ -274,8 +274,11 @@ public:
                                     {
                                         return;
                                     }
-                                    crop.watered = true;
-                                    tile->index = 4;
+                                    if (!crop.watered)
+                                    {
+                                        crop.watered = true;
+                                        tile->index++;
+                                    }
                                 });
                             }
                         }
@@ -319,12 +322,19 @@ public:
             Crop& crop = m_world.GetComponent<Crop>(handle.id);
             if (allWatered)
             {
-                crop.stage++;
+                if (crop.stage < 4)
+                {
+                    crop.stage++;
+                }
                 crop.stageHistory[m_currentDay] = crop.stage;
             }
             else
             {
                 crop.stage = crop.stageHistory[m_currentDay - 1];
+            }
+            if (crop.stage > 0)
+            {
+                m_level.GetTile(crop.tileX, crop.tileY).value()->index = 1 + 2 * crop.stage;
             }
             crop.watered = false;
         });
