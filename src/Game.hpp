@@ -364,6 +364,8 @@ public:
         auto cameraSize = drawer->GetCameraViewSize();
         drawer->SetClearColor({255, 255, 255, 255});
         drawer->Clear();
+        float colorGradient = dayTimeEasing(m_dayTimeLeft / DAY_LENGTH);
+        tako::Color dayLightColor(255 * colorGradient, 255 * colorGradient, 255 * colorGradient, 255);
 
         m_world.IterateComps<Position, Camera>([&](Position& pos, Camera& player)
         {
@@ -379,7 +381,7 @@ public:
             }
         }
          */
-        m_level.Draw(drawer);
+        m_level.Draw(drawer, dayLightColor);
 
         m_world.IterateComps<Position, RectangleRenderer, Background>([&](Position& pos, RectangleRenderer& rect, Background& b)
         {
@@ -391,11 +393,11 @@ public:
         });
         m_world.IterateComps<Position, SpriteRenderer, Background>([&](Position& pos, SpriteRenderer& sprite, Background& b)
         {
-           drawer->DrawSprite(pos.x - sprite.size.x / 2, pos.y + sprite.size.y / 2, sprite.size.x, sprite.size.y, sprite.sprite);
+           drawer->DrawSprite(pos.x - sprite.size.x / 2, pos.y + sprite.size.y / 2, sprite.size.x, sprite.size.y, sprite.sprite, dayLightColor);
         });
         m_world.IterateComps<Position, SpriteRenderer, Foreground>([&](Position& pos, SpriteRenderer& sprite, Foreground& f)
         {
-           drawer->DrawSprite(pos.x - sprite.size.x / 2, pos.y + sprite.size.y / 2, sprite.size.x, sprite.size.y, sprite.sprite);
+           drawer->DrawSprite(pos.x - sprite.size.x / 2, pos.y + sprite.size.y / 2, sprite.size.x, sprite.size.y, sprite.sprite, dayLightColor);
         });
 
         if (m_currentDay > 0)
@@ -431,4 +433,21 @@ private:
     tako::Sprite* m_waterCan;
     tako::Sprite* m_seedBag;
     tako::PixelArtDrawer* m_drawer;
+
+    float easeInSine(float x)
+    {
+        return 1 - std::cos((x * tako::mathf::PI) / 2);
+    }
+
+    float dayTimeEasing(float x)
+    {
+        if (x > 0.5f)
+        {
+            return 0.7f + 0.3f * easeInSine((1-x) / 0.5f);
+        }
+        else
+        {
+            return 0.4f + 0.6f * easeInSine(x / 0.5f);
+        }
+    }
 };

@@ -95,7 +95,7 @@ public:
         }
     }
 
-    void Draw(tako::PixelArtDrawer* drawer)
+    void Draw(tako::PixelArtDrawer* drawer, tako::Color color = {255, 255, 255, 255})
     {
         for (int y = m_height; y >= 0; y--)
         {
@@ -108,7 +108,7 @@ public:
                     continue;
                 }
 
-                drawer->DrawSprite(x * 16, y * 16 + 16, 16, 16, m_tileSprites[tile - 1]);
+                drawer->DrawSprite(x * 16, y * 16 + 16, 16, 16, m_tileSprites[tile - 1], color);
             }
         }
 
