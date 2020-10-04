@@ -3,6 +3,7 @@
 #include "Position.hpp"
 #include "Rect.hpp"
 #include "World.hpp"
+#include "Level.hpp"
 
 struct RigidBody
 {
@@ -12,7 +13,7 @@ struct RigidBody
 
 namespace Physics
 {
-    void Move(tako::World& world, Position& pos, RigidBody& rigid, tako::Vector2 movement)
+    void Move(tako::World& world, Level& level, Position& pos, RigidBody& rigid, tako::Vector2 movement)
     {
         while ((tako::mathf::abs(movement.x) > 0.0000001f || tako::mathf::abs(movement.y) > 0.0000001f))
         {
@@ -23,6 +24,21 @@ namespace Physics
                 mov.normalize();
             }
             Rect newPos = {pos.AsVec() + mov, rigid.size};
+
+            if (level.Overlap(newPos))
+            {
+                if (level.Overlap({{pos.x + mov.x, pos.y}, rigid.size}))
+                {
+                    movement.x -= mov.x / 2;
+                }
+                if (level.Overlap({{pos.x, pos.y + mov.y}, rigid.size}))
+                {
+                    movement.y -= mov.y / 2;
+                }
+
+                movement -= mov / 2;
+                continue;
+            }
             auto bump = false;
             world.IterateComps<Position, RigidBody>([&](Position& otherPos, RigidBody& otherRigid)
             {

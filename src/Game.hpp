@@ -209,7 +209,7 @@ public:
             {
                 player.facing = tako::Vector2::Normalized(moveVector);
             }
-            Physics::Move(m_world, pos, rigid, moveVector * dt * 20);
+            Physics::Move(m_world, m_level, pos, rigid, moveVector * dt * 20);
 
             float interActX = pos.x + player.facing.x * 12;
             float interActY = pos.y + player.facing.y * 12;

@@ -188,6 +188,45 @@ public:
             }
         }
     }
+
+    std::optional<Rect> Overlap(Rect rect)
+    {
+        /*
+            TL TM TR
+            ML MM MR
+            BL BM BR
+        */
+        int tileX = ((int) rect.x) / 16;
+        int tileY = ((int) rect.y) / 16;
+
+        Rect r;
+        for (int y = -1; y <= 1; y++)
+        {
+            for (int x = -1; x <= 1; x++)
+            {
+                int tX = tileX + x;
+                int tY = tileY + y;
+
+                if (tX < 0 || tX > m_width || tY < 0 || tY > m_height)
+                {
+                    continue;
+                }
+                int i = (m_height - tY) * m_width + tX;
+                if (!m_tiles[i].solid)
+                {
+                    continue;
+                }
+
+                r = { tX * 16.0f + 8, tY * 16.0f + 8, 16, 16};
+                if (Rect::Overlap(r, rect))
+                {
+                    return r;
+                }
+            }
+        }
+
+        return std::nullopt;
+    }
 private:
     std::array<tako::Sprite*, tilesetTileCount> m_tileSprites;
     std::vector<Tile> m_tiles;
