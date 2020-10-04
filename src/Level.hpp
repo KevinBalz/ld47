@@ -10,6 +10,25 @@ namespace
     constexpr auto tilesetTileCount = 16;
 }
 
+struct BuildingSize
+{
+    int startIndex;
+    int x;
+    int y;
+
+    BuildingSize(int s, int x, int y)
+    {
+        startIndex = s;
+        this->x = x;
+        this->y = y;
+    }
+};
+
+const std::map<char, BuildingSize> BUILDING_INFO =
+{{
+    {'W', {13, 2, 2}}
+}};
+
 struct Tile
 {
     int index = 0;
@@ -83,6 +102,30 @@ public:
                 case 'G':
                     tile.index = 11;
                     break;
+                case 'W':
+                    LOG("a well! {}", BUILDING_INFO.at(tileChars[i]).startIndex)
+                    tile.index = BUILDING_INFO.at(tileChars[i]).startIndex;
+                    tile.solid = true;
+                    break;
+                case '+':
+                {
+                    int bx = 0;
+                    int by = 0;
+                    while(i-bx > 0 && (tileChars[i-bx] == '+' || BUILDING_INFO.find(tileChars[i-bx]) != BUILDING_INFO.end()))
+                    {
+                        bx++;
+                    }
+                    while(i-by*m_width > 0 && (tileChars[i-by*m_width] == '+' || BUILDING_INFO.find(tileChars[i-by*m_width]) != BUILDING_INFO.end()))
+                    {
+                        by++;
+                    }
+                    bx--;
+                    by--;
+                    auto building = BUILDING_INFO.find(tileChars[i-bx-by*m_width]);
+                    tile.index = building->second.startIndex + bx + by * building->second.x;
+                    tile.solid = true;
+                    break;
+                }
             }
 
             m_tiles.push_back(tile);
