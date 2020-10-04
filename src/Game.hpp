@@ -319,7 +319,18 @@ public:
                         {
                             if (tile->index == 1 || tile->index == 2)
                             {
-                                CreateCrop(tileX, tileY);
+                                auto blocked = false;
+                                m_world.IterateComps<Pickup>([&](Pickup& pickup)
+                                {
+                                    if (tileX == pickup.x && tileY == pickup.y)
+                                    {
+                                        blocked = true;
+                                    }
+                                });
+                                if (!blocked)
+                                {
+                                    CreateCrop(tileX, tileY);
+                                }
                             }
                         }
                     }
