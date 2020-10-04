@@ -9,4 +9,8 @@ struct Pickup
 };
 
 struct WateringCan
-{};
+{
+
+};
+
+struct SeedBag {};

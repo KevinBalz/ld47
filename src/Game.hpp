@@ -10,7 +10,7 @@
 #include "Level.hpp"
 #include "Objects.hpp"
 
-constexpr auto DAY_LENGTH = 10.0f;
+constexpr auto DAY_LENGTH = 60.0f;
 
 struct Text
 {
@@ -62,6 +62,7 @@ public:
                                 " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]\a_`abcdefghijklmnopqrstuvwxyz{|}~");
 
         m_waterCan = drawer->CreateSprite(resources->Load<tako::Texture>("/Watercan.png"), 0, 0, 16, 16);
+        m_seedBag = drawer->CreateSprite(resources->Load<tako::Texture>("/SeedBag.png"), 0, 0, 16, 16);
 
         m_level.Init(drawer, resources);
         InitGame();
@@ -104,6 +105,8 @@ public:
         m_dayTimeLeftText = CreateText(m_drawer, m_font, std::to_string(m_dayTimeLeft));
 
         SpawnObject(2, 8, m_waterCan, WateringCan());
+
+        SpawnObject(4, 8, m_seedBag, SeedBag());
     }
 
     tako::Entity CreateCrop(int x, int y)
@@ -123,7 +126,16 @@ public:
 
         cr.tileX = x;
         cr.tileY = y;
-        m_level.GetTile(x, y).value()->index = 3;
+        auto tile = m_level.GetTile(x, y).value();
+        if (tile->index == 2)
+        {
+            cr.watered = true;
+            tile->index = 4;
+        }
+        else
+        {
+            tile->index = 3;
+        }
 
         return crop;
     }
@@ -213,7 +225,29 @@ public:
                 }
                 else
                 {
-                    //TODO: Drop
+                    //TODO: Find out if tile is free
+                    auto obj = player.heldObject.value();
+                    m_world.AddComponent<Pickup>(obj);
+                    m_world.AddComponent<Position>(obj);
+                    Position& p = m_world.GetComponent<Position>(obj);
+                    p.x = tileX * 16 + 8;
+                    p.y = tileY * 16 + 8;
+                    Pickup& pickup = m_world.GetComponent<Pickup>(obj);
+                    pickup.x = tileX;
+                    pickup.y = tileY;
+                    pickup.entity = obj;
+                    player.heldObject = std::nullopt;
+                    Rect placed(p.x, p.y, 16, 16);
+                    Rect self(pos.x, pos.y, rigid.size.x, rigid.size.y);
+                    if (player.facing.x && Rect::OverlapX(self, placed))
+                    {
+                        pos.x += tako::mathf::sign(pos.x - p.x) * (16 - tako::mathf::abs(pos.x - p.x));
+                    }
+                    if (player.facing.y && Rect::OverlapY(self, placed))
+                    {
+                        pos.y += tako::mathf::sign(pos.y - p.y) * (16 - tako::mathf::abs(pos.y - p.y));
+                    }
+
                 }
             }
             // Use/interact
@@ -231,7 +265,6 @@ public:
                             if (tile->index == 1)
                             {
                                 tile->index = 2;
-                                //CreateCrop(tileX, tileY);
                             }
                             else
                             {
@@ -244,6 +277,13 @@ public:
                                     crop.watered = true;
                                     tile->index = 4;
                                 });
+                            }
+                        }
+                        else if(m_world.HasComponent<SeedBag>(obj))
+                        {
+                            if (tile->index == 1 || tile->index == 2)
+                            {
+                                CreateCrop(tileX, tileY);
                             }
                         }
                     }
@@ -389,5 +429,6 @@ private:
     tako::World m_world;
     Level m_level;
     tako::Sprite* m_waterCan;
+    tako::Sprite* m_seedBag;
     tako::PixelArtDrawer* m_drawer;
 };
