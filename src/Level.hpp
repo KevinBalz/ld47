@@ -7,7 +7,7 @@
 
 namespace
 {
-    constexpr auto tilesetTileCount = 4;
+    constexpr auto tilesetTileCount = 6;
 }
 
 struct Tile
@@ -75,10 +75,13 @@ public:
                     tile.index = 1;
                     break;
                 case 'S':
-                    tile.index = 1;
+                    tile.index = 5;
                     break;
                 case 'C':
                     tile.index = 3;
+                    break;
+                case 'G':
+                    tile.index = 5;
                     break;
             }
 

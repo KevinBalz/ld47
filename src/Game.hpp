@@ -8,6 +8,7 @@
 #include "Physics.hpp"
 #include "Crop.hpp"
 #include "Level.hpp"
+#include "Objects.hpp"
 
 constexpr auto DAY_LENGTH = 10.0f;
 
@@ -37,6 +38,16 @@ void RerenderText(Text& tex, tako::PixelArtDrawer* drawer, tako::Font* font, std
     tex.size = tako::Vector2(bitmap.Width(), bitmap.Height());
 }
 
+tako::Vector2 FitMapBound(Rect bounds, tako::Vector2 cameraPos, tako::Vector2 camSize)
+{
+    cameraPos.x = std::max(bounds.Left() + camSize.x / 2, cameraPos.x);
+    cameraPos.x = std::min(bounds.Right() - camSize.x / 2, cameraPos.x);
+    cameraPos.y = std::min(bounds.Top() - camSize.y / 2, cameraPos.y);
+    cameraPos.y = std::max(bounds.Bottom() + camSize.y / 2, cameraPos.y);
+
+    return cameraPos;
+}
+
 
 class Game
 {
@@ -50,9 +61,7 @@ public:
         m_font = new tako::Font("/charmap-cellphone.png", 5, 7, 1, 1, 2, 2,
                                 " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]\a_`abcdefghijklmnopqrstuvwxyz{|}~");
 
-        m_groundTexture = resources->Load<tako::Texture>("/Ground.png");
-        m_tiledTexture = resources->Load<tako::Texture>("/Tiled.png");
-        m_plantedTexture = resources->Load<tako::Texture>("/Planted.png");
+        m_waterCan = drawer->CreateSprite(resources->Load<tako::Texture>("/Watercan.png"), 0, 0, 16, 16);
 
         m_level.Init(drawer, resources);
         InitGame();
@@ -87,11 +96,14 @@ public:
             renderer.color = {0, 0, 0, 255};
             Player& play = m_world.GetComponent<Player>(player);
             play.facing = { 0, -1 };
+            play.heldObject = std::nullopt;
         }
         m_currentDay = 1;
         m_currentDayText = CreateText(m_drawer, m_font, "Day " + std::to_string(m_currentDay));
         m_dayTimeLeft = DAY_LENGTH;
         m_dayTimeLeftText = CreateText(m_drawer, m_font, std::to_string(m_dayTimeLeft));
+
+        SpawnObject(2, 8, m_waterCan, WateringCan());
     }
 
     tako::Entity CreateCrop(int x, int y)
@@ -114,6 +126,29 @@ public:
         m_level.GetTile(x, y).value()->index = 3;
 
         return crop;
+    }
+
+    template<class T>
+    tako::Entity SpawnObject(int x, int y, tako::Sprite* sprite, T type)
+    {
+        auto entity = m_world.Create<Position, SpriteRenderer, RigidBody, Pickup, Foreground, T>();
+        Position& pos = m_world.GetComponent<Position>(entity);
+        pos.x = x * 16 + 8;
+        pos.y = y * 16 + 8;
+        SpriteRenderer& ren = m_world.GetComponent<SpriteRenderer>(entity);
+        ren.sprite = sprite;
+        ren.size = {16, 16};
+        RigidBody& rigid = m_world.GetComponent<RigidBody>(entity);
+        rigid.size = {16, 16};
+        rigid.entity = entity;
+        T& t = m_world.GetComponent<T>(entity);
+        t = type;
+        Pickup& pickup = m_world.GetComponent<Pickup>(entity);
+        pickup.x = x;
+        pickup.y = y;
+        pickup.entity = entity;
+
+        return entity;
     }
 
 
@@ -147,43 +182,70 @@ public:
                 player.facing = tako::Vector2::Normalized(moveVector);
             }
             Physics::Move(m_world, pos, rigid, moveVector * dt * 20);
+
+            int tileX = ((int) pos.x + player.facing.x * 12) / 16;
+            int tileY = ((int) pos.y + player.facing.y * 12) / 16;
+            //Pickup drop
             if (input->GetKeyDown(tako::Key::L))
             {
-                for (auto [cPos, crop] : m_world.Iter<Position, Crop>())
+                if (!player.heldObject)
                 {
-                    if (crop.watered)
+                    m_world.IterateComps<Pickup>([&](Pickup& pickup)
                     {
-                        continue;
-                    }
+                        if (player.heldObject)
+                        {
+                            return;
+                        }
+                        if (pickup.x != tileX || pickup.y != tileY)
+                        {
+                            return;
+                        }
 
-                    if (tako::mathf::abs((cPos.AsVec() - pos.AsVec()).magnitude()) < 20)
+                        player.heldObject = pickup.entity;
+                    });
+                    if (player.heldObject)
                     {
-                        crop.watered = true;
-                        break;
+                        auto obj = player.heldObject.value();
+                        m_world.RemoveComponent<Position>(obj);
+                        m_world.RemoveComponent<Pickup>(obj);
+                        //m_world.RemoveComponent<RigidBody>(obj);
                     }
                 }
-                int tileX = ((int) pos.x + player.facing.x * 12) / 16;
-                int tileY = ((int) pos.y + player.facing.y * 12) / 16;
-                auto tileOpt = m_level.GetTile(tileX, tileY);
-                if (tileOpt)
+                else
                 {
-                    auto tile = tileOpt.value();
-                    if (tile->index == 1)
+                    //TODO: Drop
+                }
+            }
+            // Use/interact
+            if (input->GetKeyDown(tako::Key::K))
+            {
+                if (player.heldObject)
+                {
+                    auto obj = player.heldObject.value();
+                    auto tileOpt = m_level.GetTile(tileX, tileY);
+                    if (tileOpt)
                     {
-                        //tile->index = 2;
-                        CreateCrop(tileX, tileY);
-                    }
-                    else
-                    {
-                        m_world.IterateComps<Crop>([&](Crop& crop)
+                        auto tile = tileOpt.value();
+                        if (m_world.HasComponent<WateringCan>(obj))
                         {
-                            if (crop.tileX != tileX || crop.tileY != tileY)
+                            if (tile->index == 1)
                             {
-                                return;
+                                tile->index = 2;
+                                //CreateCrop(tileX, tileY);
                             }
-                            crop.watered = true;
-                            tile->index = 4;
-                        });
+                            else
+                            {
+                                m_world.IterateComps<Crop>([&](Crop& crop)
+                                {
+                                    if (crop.tileX != tileX || crop.tileY != tileY)
+                                    {
+                                        return;
+                                    }
+                                    crop.watered = true;
+                                    tile->index = 4;
+                                });
+                            }
+                        }
                     }
                 }
             }
@@ -195,7 +257,7 @@ public:
         {
             PassDay();
         }
-        RerenderText(m_dayTimeLeftText, m_drawer, m_font, std::to_string(m_dayTimeLeft));
+        RerenderText(m_dayTimeLeftText, m_drawer, m_font, std::to_string((int) std::ceil(m_dayTimeLeft)));
     }
 
     void PassDay()
@@ -265,7 +327,7 @@ public:
 
         m_world.IterateComps<Position, Camera>([&](Position& pos, Camera& player)
         {
-           drawer->SetCameraPosition(pos.AsVec());
+           drawer->SetCameraPosition(FitMapBound(m_level.MapBounds(), pos.AsVec(), drawer->GetCameraViewSize()));
         });
         //Render map
         /*
@@ -299,7 +361,20 @@ public:
         if (m_currentDay > 0)
         {
             drawer->SetCameraPosition(cameraSize / 2);
+            constexpr auto uiBackground = tako::Color(238, 195, 154, 255);
+            drawer->DrawRectangle(0, cameraSize.y, 60, 28, uiBackground);
             drawer->DrawImage(4, cameraSize.y - 4, m_currentDayText.size.x, m_currentDayText.size.y, m_currentDayText.texture, {0, 0, 0, 255});
+
+            drawer->DrawRectangle(36, cameraSize.y - 4, 20, 20, {0, 0, 0, 255});
+            drawer->DrawRectangle(37, cameraSize.y - 5, 18, 18, uiBackground);
+            m_world.IterateComps<Player>([&](Player& p)
+            {
+                if (p.heldObject)
+                {
+                    drawer->DrawSprite(38, cameraSize.y - 6, 16, 16, m_world.GetComponent<SpriteRenderer>(p.heldObject.value()).sprite);
+                }
+            });
+
 
             drawer->DrawImage(4, cameraSize.y - 16, m_dayTimeLeftText.size.x, m_dayTimeLeftText.size.y, m_dayTimeLeftText.texture, {0, 0, 0, 255});
         }
@@ -313,8 +388,6 @@ private:
     tako::Font* m_font;
     tako::World m_world;
     Level m_level;
-    tako::Texture* m_groundTexture;
-    tako::Texture* m_tiledTexture;
-    tako::Texture* m_plantedTexture;
+    tako::Sprite* m_waterCan;
     tako::PixelArtDrawer* m_drawer;
 };

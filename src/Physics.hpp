@@ -24,11 +24,15 @@ namespace Physics
             }
             Rect newPos = {pos.AsVec() + mov, rigid.size};
             auto bump = false;
-            for (auto [otherPos, otherRigid] : world.Iter<Position, RigidBody>())
+            world.IterateComps<Position, RigidBody>([&](Position& otherPos, RigidBody& otherRigid)
             {
+                if (bump)
+                {
+                    return;
+                }
                 if (&rigid == &otherRigid)
                 {
-                    continue;
+                    return;
                 }
 
                 Rect other = {otherPos.AsVec(), otherRigid.size};
@@ -45,9 +49,9 @@ namespace Physics
 
                     movement -= mov / 2;
                     bump = true;
-                    break;
+                    return;
                 }
-            }
+            });
             if (bump) continue;
             movement -= mov;
             pos += mov;

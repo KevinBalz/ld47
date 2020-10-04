@@ -15,7 +15,7 @@ add_executable(${EXECUTABLE}
         "src/Renderer.hpp"
         "src/Physics.hpp"
         "src/Crop.hpp"
-        "src/Level.hpp")
+        "src/Level.hpp" src/Objects.hpp)
 configure_file("src/index.html" "./index.html")
 
 tako_setup(${EXECUTABLE})
