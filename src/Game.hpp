@@ -226,28 +226,61 @@ public:
                 else
                 {
                     //TODO: Find out if tile is free
-                    auto obj = player.heldObject.value();
-                    m_world.AddComponent<Pickup>(obj);
-                    m_world.AddComponent<Position>(obj);
-                    Position& p = m_world.GetComponent<Position>(obj);
-                    p.x = tileX * 16 + 8;
-                    p.y = tileY * 16 + 8;
-                    Pickup& pickup = m_world.GetComponent<Pickup>(obj);
-                    pickup.x = tileX;
-                    pickup.y = tileY;
-                    pickup.entity = obj;
-                    player.heldObject = std::nullopt;
-                    Rect placed(p.x, p.y, 16, 16);
-                    Rect self(pos.x, pos.y, rigid.size.x, rigid.size.y);
-                    if (player.facing.x && Rect::OverlapX(self, placed))
+                    auto blocked = false;
+                    m_world.IterateComps<Pickup>([&](Pickup& pickup)
                     {
-                        pos.x += tako::mathf::sign(pos.x - p.x) * (16 - tako::mathf::abs(pos.x - p.x));
-                    }
-                    if (player.facing.y && Rect::OverlapY(self, placed))
+                        if (blocked)
+                        {
+                            return;
+                        }
+                        if (pickup.x != tileX || pickup.y != tileY)
+                        {
+                            return;
+                        }
+
+                        blocked = true;
+                    });
+                    if (!blocked)
                     {
-                        pos.y += tako::mathf::sign(pos.y - p.y) * (16 - tako::mathf::abs(pos.y - p.y));
+                        m_world.IterateComps<Crop>([&](Crop& crop)
+                        {
+                            if (blocked)
+                            {
+                                return;
+                            }
+                            if (crop.tileX != tileX || crop.tileY != tileY)
+                            {
+                                return;
+                            }
+
+                            blocked = true;
+                        });
                     }
 
+                    if (!blocked)
+                    {
+                        auto obj = player.heldObject.value();
+                        m_world.AddComponent<Pickup>(obj);
+                        m_world.AddComponent<Position>(obj);
+                        Position& p = m_world.GetComponent<Position>(obj);
+                        p.x = tileX * 16 + 8;
+                        p.y = tileY * 16 + 8;
+                        Pickup& pickup = m_world.GetComponent<Pickup>(obj);
+                        pickup.x = tileX;
+                        pickup.y = tileY;
+                        pickup.entity = obj;
+                        player.heldObject = std::nullopt;
+                        Rect placed(p.x, p.y, 16, 16);
+                        Rect self(pos.x, pos.y, rigid.size.x, rigid.size.y);
+                        if (player.facing.x && Rect::OverlapX(self, placed))
+                        {
+                            pos.x += tako::mathf::sign(pos.x - p.x) * (16 - tako::mathf::abs(pos.x - p.x));
+                        }
+                        if (player.facing.y && Rect::OverlapY(self, placed))
+                        {
+                            pos.y += tako::mathf::sign(pos.y - p.y) * (16 - tako::mathf::abs(pos.y - p.y));
+                        }
+                    }
                 }
             }
             // Use/interact
