@@ -103,7 +103,6 @@ public:
                     tile.index = 11;
                     break;
                 case 'W':
-                    LOG("a well! {}", BUILDING_INFO.at(tileChars[i]).startIndex)
                     tile.index = BUILDING_INFO.at(tileChars[i]).startIndex;
                     tile.solid = true;
                     break;

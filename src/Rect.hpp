@@ -40,6 +40,11 @@ struct Rect
         return y - h / 2;
     }
 
+    bool PointInside(float px, float py)
+    {
+        return px >= Left() && px <= Right() && py <= Top() && py >= Bottom();
+    }
+
     static bool Overlap(Rect a, Rect b)
     {
         return OverlapX(a, b) && OverlapY(a, b);

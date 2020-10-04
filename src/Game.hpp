@@ -82,6 +82,10 @@ public:
             {
                 CreateCrop(x, y);
             }},
+            {'W', [&](int x, int y)
+            {
+                SpawnBuilding(x, y, BUILDING_INFO.at('W'), Well());
+            }},
         }};
         m_level.LoadLevel("/Level.txt", levelCallbacks);
 
@@ -104,9 +108,21 @@ public:
         m_dayTimeLeft = DAY_LENGTH;
         m_dayTimeLeftText = CreateText(m_drawer, m_font, std::to_string(m_dayTimeLeft));
 
-        SpawnObject(2, 8, m_waterCan, WateringCan());
-
         SpawnObject(4, 8, m_seedBag, SeedBag());
+    }
+
+    template<class T>
+    tako::Entity SpawnBuilding(int x, int y, const BuildingSize& size, T type)
+    {
+        auto entity = m_world.Create<Position, Interactable, T>();
+        Position& pos = m_world.GetComponent<Position>(entity);
+        pos = tako::Vector2(x * 16 + size.x * 8, (y+1) * 16 - size.y * 8);
+        Interactable& inter = m_world.GetComponent<Interactable>(entity);
+        inter.w = size.x * 16;
+        inter.h = size.y * 16;
+        T& t = m_world.GetComponent<T>(entity);
+        t = type;
+        return entity;
     }
 
     tako::Entity CreateCrop(int x, int y)
@@ -195,8 +211,10 @@ public:
             }
             Physics::Move(m_world, pos, rigid, moveVector * dt * 20);
 
-            int tileX = ((int) pos.x + player.facing.x * 12) / 16;
-            int tileY = ((int) pos.y + player.facing.y * 12) / 16;
+            float interActX = pos.x + player.facing.x * 12;
+            float interActY = pos.y + player.facing.y * 12;
+            int tileX = ((int) interActX) / 16;
+            int tileY = ((int) interActY) / 16;
             //Pickup drop
             if (input->GetKeyDown(tako::Key::L))
             {
@@ -214,6 +232,25 @@ public:
                         }
 
                         player.heldObject = pickup.entity;
+                    });
+                    m_world.IterateHandle<Position, Interactable>([&](tako::EntityHandle handle)
+                    {
+                        if (player.heldObject)
+                        {
+                            return;
+                        }
+                        auto& interactable = m_world.GetComponent<Interactable>(handle.id);
+                        auto& iPos = m_world.GetComponent<Position>(handle.id);
+                        Rect interRect(iPos.x, iPos.y, interactable.w, interactable.h);
+                        if (!interRect.PointInside(interActX, interActY))
+                        {
+                            return;
+                        }
+
+                        if (m_world.HasComponent<Well>(handle.id))
+                        {
+                            player.heldObject = SpawnObject(tileX, tileY, m_waterCan, WateringCan());
+                        }
                     });
                     if (player.heldObject)
                     {
@@ -433,16 +470,6 @@ public:
         {
            drawer->SetCameraPosition(FitMapBound(m_level.MapBounds(), pos.AsVec(), drawer->GetCameraViewSize()));
         });
-        //Render map
-        /*
-        for (int x = -16; x < 16; x++)
-        {
-            for (int y = -16; y < 16; y++)
-            {
-                drawer->DrawImage(x * 16, y * 16, 16, 16, y % 3 == 0 ? m_plantedTexture: m_tiledTexture);
-            }
-        }
-         */
         m_level.Draw(drawer, dayLightColor);
 
         m_world.IterateComps<Position, RectangleRenderer, Background>([&](Position& pos, RectangleRenderer& rect, Background& b)

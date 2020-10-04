@@ -14,3 +14,11 @@ struct WateringCan
 };
 
 struct SeedBag {};
+
+struct Well {};
+
+struct Interactable
+{
+    float w;
+    float h;
+};
