@@ -295,9 +295,11 @@ public:
                         auto tile = tileOpt.value();
                         if (m_world.HasComponent<WateringCan>(obj))
                         {
+                            auto& waterCan = m_world.GetComponent<WateringCan>(obj);
                             if (tile->index == 1)
                             {
                                 tile->index = 2;
+                                waterCan.left--;
                             }
                             else
                             {
@@ -310,9 +312,15 @@ public:
                                     if (!crop.watered)
                                     {
                                         crop.watered = true;
+                                        waterCan.left--;
                                         tile->index++;
                                     }
                                 });
+                            }
+                            if (waterCan.left <= 0)
+                            {
+                                m_world.Delete(obj);
+                                player.heldObject = std::nullopt;
                             }
                         }
                         else if(m_world.HasComponent<SeedBag>(obj))

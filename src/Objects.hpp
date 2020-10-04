@@ -10,7 +10,7 @@ struct Pickup
 
 struct WateringCan
 {
-
+    int left = 9;
 };
 
 struct SeedBag {};
