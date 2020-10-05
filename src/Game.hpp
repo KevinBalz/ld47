@@ -73,11 +73,18 @@ public:
         LoadClips();
 
         m_level.Init(drawer, resources);
+        StartGame();
+    }
+
+    void StartGame()
+    {
         InitGame();
+        tako::Audio::Play(*m_clipMusic, true);
     }
 
     void InitGame()
     {
+        m_world.Reset();
         m_currentDay = 0;
 
         std::map<char, std::function<void(int,int)>> levelCallbacks
@@ -132,8 +139,6 @@ public:
         m_dayTimeLeftText = CreateText(m_drawer, m_font, std::to_string(m_dayTimeLeft));
         m_parsnipCount = m_parsnipCountPrev = m_parsnipCountSafe = 0;
         m_parsnipText = CreateText(m_drawer, m_font, std::to_string(m_parsnipCount));
-
-        tako::Audio::Play(*m_clipMusic, true);
     }
 
     template<class T>
@@ -207,6 +212,11 @@ public:
 
     void Update(tako::Input* input, float dt)
     {
+        if (input->GetKeyDown(tako::Key::Space))
+        {
+            InitGame();
+            return;
+        }
         m_world.IterateComps<Position, Player, RigidBody, SpriteRenderer, AnimatedSprite>([&](Position& pos, Player& player, RigidBody& rigid, SpriteRenderer& spriteRenderer, AnimatedSprite& anim)
         {
             tako::Vector2 moveVector;

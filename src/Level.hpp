@@ -54,6 +54,7 @@ public:
 
     void LoadLevel(const char* file, std::map<char, std::function<void(int,int)>>& callbackMap)
     {
+        m_tiles.clear();
         constexpr size_t bufferSize = 1024 * 1024;
         std::array <tako::U8, bufferSize> buffer;
         size_t bytesRead = 0;
