@@ -88,7 +88,7 @@ public:
         m_textPressAny = CreateText(drawer, m_font, "Press a button to start");
         m_textTitle = CreateText(drawer, m_font, "HARVEST\nMINUTE");
         m_textControls = CreateText(drawer, m_font, " WASD - Move\n  L/C - Pickup/Drop\n  K/X - Use held item\nEnter - Skip to end of day");
-        m_textCredits = CreateText(drawer, m_font, "Made in 72 hours by Malai\nLudum Dare 47 - Stuck in a loop\nPowered by tako");
+        m_textCredits = CreateText(drawer, m_font, "Made in 72 hours by Malai\nLudum Dare 47 - Stuck in a loop");
         m_textEndScreen = CreateText(drawer, m_font, "This is a bug");
     }
 
