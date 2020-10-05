@@ -63,6 +63,7 @@ public:
 
         m_waterCan = drawer->CreateSprite(resources->Load<tako::Texture>("/Watercan.png"), 0, 0, 16, 16);
         m_seedBag = drawer->CreateSprite(resources->Load<tako::Texture>("/SeedBag.png"), 0, 0, 16, 16);
+        m_parsnip = drawer->CreateSprite(resources->Load<tako::Texture>("/Parsnip.png"), 0, 0, 16, 16);
 
         m_level.Init(drawer, resources);
         InitGame();
@@ -132,7 +133,7 @@ public:
         pos.x = x * 16 + 8;
         pos.y = y * 16 + 8;
         Crop& cr = m_world.GetComponent<Crop>(crop);
-        cr.stage = 1;
+        cr.stage = 4;
         cr.watered = false;
         cr.stageHistory[m_currentDay] = cr.stage;
         for (int i = 0; i < m_currentDay; i++)
@@ -252,18 +253,35 @@ public:
                             player.heldObject = SpawnObject(tileX, tileY, m_waterCan, WateringCan());
                         }
                     });
+                    m_world.IterateComps<Crop>([&](Crop& crop)
+                    {
+                        if (player.heldObject)
+                        {
+                            return;
+                        }
+                        if (crop.tileX != tileX || crop.tileY != tileY)
+                        {
+                            return;
+                        }
+                        if (crop.stage == 4)
+                        {
+                            crop.stage = -69;
+                            player.heldObject = SpawnObject(tileX, tileY, m_parsnip, Parsnip());
+                            m_level.GetTile(tileX, tileY).value()->index = crop.watered ? 2 : 1;
+                            crop.watered = true;
+                        }
+                    });
                     if (player.heldObject)
                     {
                         auto obj = player.heldObject.value();
                         m_world.RemoveComponent<Position>(obj);
                         m_world.RemoveComponent<Pickup>(obj);
-                        //m_world.RemoveComponent<RigidBody>(obj);
                     }
                 }
                 else
                 {
-                    //TODO: Find out if tile is free
-                    auto blocked = false;
+                    // Find out if tile is free
+                    auto blocked = ((int) m_playerSpawn.x) / 16 == tileX && ((int) m_playerSpawn.y) / 16 == tileY;
                     m_world.IterateComps<Pickup>([&](Pickup& pickup)
                     {
                         if (blocked)
@@ -285,7 +303,7 @@ public:
                             {
                                 return;
                             }
-                            if (crop.tileX != tileX || crop.tileY != tileY)
+                            if (crop.tileX != tileX || crop.tileY != tileY || crop.stage <= 0)
                             {
                                 return;
                             }
@@ -427,6 +445,7 @@ public:
             }
             crop.watered = false;
         });
+        std::vector<tako::Entity> clearCrop;
         if (allWatered)
         {
             m_currentDay++;
@@ -434,20 +453,33 @@ public:
         }
         else
         {
-            std::vector<tako::Entity> clearCrop;
-            m_world.IterateHandle<Crop>([&](tako::EntityHandle handle)
+            m_world.IterateHandle<Parsnip>([&](tako::EntityHandle handle)
             {
-                Crop& crop = m_world.GetComponent<Crop>(handle.id);
-                if (crop.stage == 0)
+                clearCrop.push_back(handle.id);
+                m_world.IterateComps<Player>([&](Player& player)
                 {
-                    clearCrop.push_back(handle.id);
+                    if (player.heldObject && player.heldObject.value() == handle.id)
+                    {
+                        player.heldObject = std::nullopt;
+                    }
+                });
+            });
+        }
+        m_world.IterateHandle<Crop>([&](tako::EntityHandle handle)
+        {
+            Crop& crop = m_world.GetComponent<Crop>(handle.id);
+            if (crop.stage <= 0)
+            {
+                clearCrop.push_back(handle.id);
+                if (!allWatered)
+                {
                     m_level.GetTile(crop.tileX, crop.tileY).value()->index = 1;
                 }
-            });
-            for (auto ent : clearCrop)
-            {
-                m_world.Delete(ent);
             }
+        });
+        for (auto ent : clearCrop)
+        {
+            m_world.Delete(ent);
         }
         m_level.ResetWatered();
         for (auto [pos, player]: m_world.Iter<Position, Player>())
@@ -521,6 +553,7 @@ private:
     Level m_level;
     tako::Sprite* m_waterCan;
     tako::Sprite* m_seedBag;
+    tako::Sprite* m_parsnip;
     tako::PixelArtDrawer* m_drawer;
 
     float easeInSine(float x)

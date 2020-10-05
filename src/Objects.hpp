@@ -17,6 +17,8 @@ struct SeedBag {};
 
 struct Well {};
 
+struct Parsnip {};
+
 struct Interactable
 {
     float w;
