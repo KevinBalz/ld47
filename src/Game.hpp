@@ -64,6 +64,7 @@ public:
         m_waterCan = drawer->CreateSprite(resources->Load<tako::Texture>("/Watercan.png"), 0, 0, 16, 16);
         m_seedBag = drawer->CreateSprite(resources->Load<tako::Texture>("/SeedBag.png"), 0, 0, 16, 16);
         m_parsnip = drawer->CreateSprite(resources->Load<tako::Texture>("/Parsnip.png"), 0, 0, 16, 16);
+        m_parsnipUI = resources->Load<tako::Texture>("/ParsnipUI.png");
         auto playerBit = resources->Load<tako::Texture>("/Player.png");
         for (int i = 0; i < m_playerSprites.size(); i++)
         {
@@ -120,6 +121,8 @@ public:
         m_currentDayText = CreateText(m_drawer, m_font, "Day " + std::to_string(m_currentDay));
         m_dayTimeLeft = DAY_LENGTH;
         m_dayTimeLeftText = CreateText(m_drawer, m_font, std::to_string(m_dayTimeLeft));
+        m_parsnipCount = m_parsnipCountPrev = 0;
+        m_parsnipText = CreateText(m_drawer, m_font, std::to_string(m_parsnipCount));
 
         SpawnObject(4, 8, m_seedBag, SeedBag());
     }
@@ -145,7 +148,7 @@ public:
         pos.x = x * 16 + 8;
         pos.y = y * 16 + 8;
         Crop& cr = m_world.GetComponent<Crop>(crop);
-        cr.stage = 1;
+        cr.stage = 4;
         cr.watered = false;
         cr.stageHistory[m_currentDay] = cr.stage;
         for (int i = 0; i < m_currentDay; i++)
@@ -230,10 +233,10 @@ public:
                     spriteRenderer.size.x = tako::mathf::sign(player.facing.x) * tako::mathf::abs(spriteRenderer.size.x);
                 }
             }
-            Physics::Move(m_world, m_level, pos, rigid, moveVector * dt * 20);
+            Physics::Move(m_world, m_level, pos, rigid, moveVector * dt * 30);
             if ((!player.wasMoving || changedFacing) && moveMagnitude > 0)
             {
-                anim.SetAnim(0.3f, &m_playerSprites[GetIdleIndex(player.facing)], 4);
+                anim.SetAnim(0.15f, &m_playerSprites[GetIdleIndex(player.facing)], 4);
                 spriteRenderer.sprite = m_playerSprites[GetIdleIndex(player.facing)+1];
                 anim.passed = 0;
             }
@@ -284,6 +287,8 @@ public:
                         {
                             m_world.Delete(held);
                             player.heldObject = std::nullopt;
+                            m_parsnipCount++;
+                            RerenderText(m_parsnipText, m_drawer, m_font, std::to_string(m_parsnipCount));
                             didInteract = true;
                         }
                     }
@@ -361,6 +366,24 @@ public:
                                 }
 
                                 blocked = true;
+                            });
+                        }
+                        if (!blocked)
+                        {
+                            m_world.IterateHandle<Position, Interactable>([&](tako::EntityHandle handle)
+                            {
+                                if (blocked)
+                                {
+                                    return;
+                                }
+                                auto &interactable = m_world.GetComponent<Interactable>(handle.id);
+                                auto &iPos = m_world.GetComponent<Position>(handle.id);
+                                Rect interRect(iPos.x, iPos.y, interactable.w, interactable.h);
+                                if (interRect.PointInside(interActX, interActY))
+                                {
+                                    blocked = true;
+                                    return;
+                                }
                             });
                         }
 
@@ -460,7 +483,8 @@ public:
         {
             PassDay();
         }
-        RerenderText(m_dayTimeLeftText, m_drawer, m_font, std::to_string((int) std::ceil(m_dayTimeLeft)));
+        int dayLeft = std::ceil(m_dayTimeLeft);
+        RerenderText(m_dayTimeLeftText, m_drawer, m_font, (dayLeft < 10 ? " " : "") + std::to_string(dayLeft));
 
 
         m_world.IterateComps<SpriteRenderer, AnimatedSprite>([&](SpriteRenderer& sprite, AnimatedSprite& anim)
@@ -526,10 +550,13 @@ public:
         if (allWatered)
         {
             m_currentDay++;
+            m_parsnipCountPrev = m_parsnipCount;
             RerenderText(m_currentDayText, m_drawer, m_font, "Day " + std::to_string(m_currentDay));
         }
         else
         {
+            m_parsnipCount = m_parsnipCountPrev;
+            RerenderText(m_parsnipText, m_drawer, m_font, std::to_string(m_parsnipCount));
             m_world.IterateHandle<Parsnip>([&](tako::EntityHandle handle)
             {
                 clearCrop.push_back(handle.id);
@@ -605,6 +632,9 @@ public:
             drawer->DrawRectangle(0, cameraSize.y, 60, 28, uiBackground);
             drawer->DrawImage(4, cameraSize.y - 4, m_currentDayText.size.x, m_currentDayText.size.y, m_currentDayText.texture, {0, 0, 0, 255});
 
+            drawer->DrawImage(3, cameraSize.y - 16, 5, 7, m_parsnipUI);
+            drawer->DrawImage(11, cameraSize.y - 16, m_parsnipText.size.x, m_parsnipText.size.y, m_parsnipText.texture, {0, 0, 0, 255});
+
             drawer->DrawRectangle(36, cameraSize.y - 4, 20, 20, {0, 0, 0, 255});
             drawer->DrawRectangle(37, cameraSize.y - 5, 18, 18, uiBackground);
             m_world.IterateComps<Player>([&](Player& p)
@@ -615,19 +645,24 @@ public:
                 }
             });
 
-
-            drawer->DrawImage(4, cameraSize.y - 16, m_dayTimeLeftText.size.x, m_dayTimeLeftText.size.y, m_dayTimeLeftText.texture, {0, 0, 0, 255});
+            drawer->DrawRectangle(4, cameraSize.y - 30, 15, 11, uiBackground);
+            auto timerColor = m_dayTimeLeft > 10 ? tako::Color(0, 0, 0, 255) : tako::Color(255, 0, 0, 255);
+            drawer->DrawImage(6, cameraSize.y - 32, m_dayTimeLeftText.size.x, m_dayTimeLeftText.size.y, m_dayTimeLeftText.texture, timerColor);
         }
     }
 private:
     int m_currentDay = 0;
     float m_dayTimeLeft;
+    int m_parsnipCount;
+    int m_parsnipCountPrev;
     Text m_currentDayText;
     Text m_dayTimeLeftText;
+    Text m_parsnipText;
     tako::Vector2 m_playerSpawn = {0, 0};
     tako::Font* m_font;
     tako::World m_world;
     Level m_level;
+    tako::Texture* m_parsnipUI;
     tako::Sprite* m_waterCan;
     tako::Sprite* m_seedBag;
     tako::Sprite* m_parsnip;
