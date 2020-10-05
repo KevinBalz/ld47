@@ -70,6 +70,7 @@ public:
         {
             m_playerSprites[i] = drawer->CreateSprite(playerBit, i * 16, 0, 16, 24);
         }
+        LoadClips();
 
         m_level.Init(drawer, resources);
         InitGame();
@@ -121,10 +122,11 @@ public:
         m_currentDayText = CreateText(m_drawer, m_font, "Day " + std::to_string(m_currentDay));
         m_dayTimeLeft = DAY_LENGTH;
         m_dayTimeLeftText = CreateText(m_drawer, m_font, std::to_string(m_dayTimeLeft));
-        m_parsnipCount = m_parsnipCountPrev = 0;
+        m_parsnipCount = m_parsnipCountPrev = m_parsnipCountSafe = 0;
         m_parsnipText = CreateText(m_drawer, m_font, std::to_string(m_parsnipCount));
 
         SpawnObject(4, 8, m_seedBag, SeedBag());
+        tako::Audio::Play(*m_clipMusic, true);
     }
 
     template<class T>
@@ -268,12 +270,21 @@ public:
                     {
                         if (player.heldObject)
                         {
+                            auto held = player.heldObject.value();
+                            if (m_world.HasComponent<WateringCan>(held))
+                            {
+                                auto& watering = m_world.GetComponent<WateringCan>(held);
+                                watering = WateringCan();
+                                tako::Audio::Play(*m_clipSplash);
+                                didInteract = true;
+                            }
                             return;
                         }
                         auto obj = SpawnObject(tileX, tileY, m_waterCan, WateringCan());
                         m_world.RemoveComponent<Position>(obj);
                         m_world.RemoveComponent<Pickup>(obj);
                         player.heldObject = obj;
+                        tako::Audio::Play(*m_clipSplash);
                         didInteract = true;
                     }
                     else if (m_world.HasComponent<TransportBox>(handle.id))
@@ -285,10 +296,15 @@ public:
                         auto held = player.heldObject.value();
                         if (m_world.HasComponent<Parsnip>(held))
                         {
+                            if (m_world.GetComponent<Parsnip>(held).harvestDay < m_currentDay)
+                            {
+                                m_parsnipCountSafe++;
+                            }
                             m_world.Delete(held);
                             player.heldObject = std::nullopt;
                             m_parsnipCount++;
                             RerenderText(m_parsnipText, m_drawer, m_font, std::to_string(m_parsnipCount));
+                            tako::Audio::Play(*m_clipSend);
                             didInteract = true;
                         }
                     }
@@ -309,6 +325,7 @@ public:
                             }
 
                             player.heldObject = pickup.entity;
+                            tako::Audio::Play(*m_clipPickup);
                         });
                         m_world.IterateComps<Crop>([&](Crop& crop)
                         {
@@ -323,9 +340,12 @@ public:
                             if (crop.stage == 4)
                             {
                                 crop.stage = -69;
-                                player.heldObject = SpawnObject(tileX, tileY, m_parsnip, Parsnip());
+                                Parsnip snip;
+                                snip.harvestDay = m_currentDay;
+                                player.heldObject = SpawnObject(tileX, tileY, m_parsnip, snip);
                                 m_level.GetTile(tileX, tileY).value()->index = crop.watered ? 2 : 1;
                                 crop.watered = true;
+                                tako::Audio::Play(*m_clipHarvest);
                             }
                         });
                         if (player.heldObject)
@@ -333,6 +353,10 @@ public:
                             auto obj = player.heldObject.value();
                             m_world.RemoveComponent<Position>(obj);
                             m_world.RemoveComponent<Pickup>(obj);
+                        }
+                        else
+                        {
+                            tako::Audio::Play(*m_clipError);
                         }
                     }
                     else
@@ -410,6 +434,11 @@ public:
                             {
                                 pos.y += tako::mathf::sign(pos.y - p.y) * (16 - tako::mathf::abs(pos.y - p.y));
                             }
+                            tako::Audio::Play(*m_clipDrop);
+                        }
+                        else
+                        {
+                            tako::Audio::Play(*m_clipError);
                         }
                     }
                 }
@@ -427,10 +456,12 @@ public:
                         if (m_world.HasComponent<WateringCan>(obj))
                         {
                             auto& waterCan = m_world.GetComponent<WateringCan>(obj);
+                            auto didWater = false;
                             if (tile->index == 1)
                             {
                                 tile->index = 2;
                                 waterCan.left--;
+                                didWater = true;
                             }
                             else
                             {
@@ -445,6 +476,7 @@ public:
                                         crop.watered = true;
                                         waterCan.left--;
                                         tile->index++;
+                                        didWater = true;
                                     }
                                 });
                             }
@@ -453,6 +485,7 @@ public:
                                 m_world.Delete(obj);
                                 player.heldObject = std::nullopt;
                             }
+                            tako::Audio::Play(didWater ? *m_clipWater : *m_clipError);
                         }
                         else if(m_world.HasComponent<SeedBag>(obj))
                         {
@@ -469,14 +502,35 @@ public:
                                 if (!blocked)
                                 {
                                     CreateCrop(tileX, tileY);
+                                    tako::Audio::Play(*m_clipSow);
+                                }
+                                else
+                                {
+                                    tako::Audio::Play(*m_clipError);
                                 }
                             }
+                            else
+                            {
+                                tako::Audio::Play(*m_clipError);
+                            }
+                        }
+                        else
+                        {
+                            tako::Audio::Play(*m_clipError);
                         }
                     }
+                }
+                else
+                {
+                    tako::Audio::Play(*m_clipError);
                 }
             }
         });
 
+        if (m_dayTimeLeft > 3 && (input->GetKeyDown(tako::Key::Enter) || input->GetKeyDown(tako::Key::Gamepad_Start)))
+        {
+            m_dayTimeLeft = 3;
+        }
 
         m_dayTimeLeft -= dt;
         if (m_dayTimeLeft <= 0)
@@ -484,7 +538,12 @@ public:
             PassDay();
         }
         int dayLeft = std::ceil(m_dayTimeLeft);
+        if (dayLeft != m_dayTimeLeftPrev && dayLeft <= 10)
+        {
+            tako::Audio::Play(*m_clipTick);
+        }
         RerenderText(m_dayTimeLeftText, m_drawer, m_font, (dayLeft < 10 ? " " : "") + std::to_string(dayLeft));
+        m_dayTimeLeftPrev = dayLeft;
 
 
         m_world.IterateComps<SpriteRenderer, AnimatedSprite>([&](SpriteRenderer& sprite, AnimatedSprite& anim)
@@ -551,22 +610,28 @@ public:
         {
             m_currentDay++;
             m_parsnipCountPrev = m_parsnipCount;
+            m_parsnipCountSafe = 0;
             RerenderText(m_currentDayText, m_drawer, m_font, "Day " + std::to_string(m_currentDay));
+            tako::Audio::Play(*m_clipDay);
         }
         else
         {
-            m_parsnipCount = m_parsnipCountPrev;
+            tako::Audio::Play(*m_clipLoop);
+            m_parsnipCount = m_parsnipCountPrev + m_parsnipCountSafe;
             RerenderText(m_parsnipText, m_drawer, m_font, std::to_string(m_parsnipCount));
             m_world.IterateHandle<Parsnip>([&](tako::EntityHandle handle)
             {
-                clearCrop.push_back(handle.id);
-                m_world.IterateComps<Player>([&](Player& player)
+                if (m_world.GetComponent<Parsnip>(handle.id).harvestDay == m_currentDay)
                 {
-                    if (player.heldObject && player.heldObject.value() == handle.id)
+                    clearCrop.push_back(handle.id);
+                    m_world.IterateComps<Player>([&](Player &player)
                     {
-                        player.heldObject = std::nullopt;
-                    }
-                });
+                        if (player.heldObject && player.heldObject.value() == handle.id)
+                        {
+                            player.heldObject = std::nullopt;
+                        }
+                    });
+                }
             });
         }
         m_world.IterateHandle<Crop>([&](tako::EntityHandle handle)
@@ -653,7 +718,9 @@ public:
 private:
     int m_currentDay = 0;
     float m_dayTimeLeft;
+    int m_dayTimeLeftPrev;
     int m_parsnipCount;
+    int m_parsnipCountSafe;
     int m_parsnipCountPrev;
     Text m_currentDayText;
     Text m_dayTimeLeftText;
@@ -668,6 +735,34 @@ private:
     tako::Sprite* m_parsnip;
     std::array<tako::Sprite*, 12> m_playerSprites;
     tako::PixelArtDrawer* m_drawer;
+    tako::AudioClip* m_clipDay;
+    tako::AudioClip* m_clipDrop;
+    tako::AudioClip* m_clipError;
+    tako::AudioClip* m_clipHarvest;
+    tako::AudioClip* m_clipLoop;
+    tako::AudioClip* m_clipMusic;
+    tako::AudioClip* m_clipPickup;
+    tako::AudioClip* m_clipSend;
+    tako::AudioClip* m_clipSow;
+    tako::AudioClip* m_clipSplash;
+    tako::AudioClip* m_clipTick;
+    tako::AudioClip* m_clipWater;
+
+    void LoadClips()
+    {
+        m_clipDay = new tako::AudioClip("/Day.wav");
+        m_clipDrop = new tako::AudioClip("/Drop.wav");
+        m_clipError = new tako::AudioClip("/Error.wav");
+        m_clipHarvest = new tako::AudioClip("/Harvest.wav");
+        m_clipLoop = new tako::AudioClip("/Loop.wav");
+        m_clipMusic = new tako::AudioClip("/music.mp3");
+        m_clipPickup = new tako::AudioClip("/Pickup.wav");
+        m_clipSend = new tako::AudioClip("/Send.wav");
+        m_clipSow = new tako::AudioClip("/Sow.wav");
+        m_clipSplash = new tako::AudioClip("/Splash.wav");
+        m_clipTick = new tako::AudioClip("/Tick.wav");
+        m_clipWater = new tako::AudioClip("/Water.wav");
+    }
 
     float easeInSine(float x)
     {
@@ -682,7 +777,7 @@ private:
         }
         else
         {
-            return 0.4f + 0.6f * easeInSine(x / 0.5f);
+            return 0.25f + 0.75f * easeInSine(x / 0.5f);
         }
     }
 

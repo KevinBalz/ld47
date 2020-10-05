@@ -18,7 +18,10 @@ struct SeedBag {};
 struct Well {};
 struct TransportBox {};
 
-struct Parsnip {};
+struct Parsnip
+{
+    int harvestDay;
+};
 
 struct Interactable
 {
