@@ -98,6 +98,14 @@ public:
             {
                 SpawnBuilding(x, y, BUILDING_INFO.at('B'), TransportBox());
             }},
+            {'b', [&](int x, int y)
+            {
+                SpawnObject(x, y, m_seedBag, SeedBag());
+            }},
+            {'w', [&](int x, int y)
+            {
+                SpawnObject(x, y, m_waterCan, WateringCan());
+            }}
         }};
         m_level.LoadLevel("/Level.txt", levelCallbacks);
 
@@ -125,7 +133,6 @@ public:
         m_parsnipCount = m_parsnipCountPrev = m_parsnipCountSafe = 0;
         m_parsnipText = CreateText(m_drawer, m_font, std::to_string(m_parsnipCount));
 
-        SpawnObject(4, 8, m_seedBag, SeedBag());
         tako::Audio::Play(*m_clipMusic, true);
     }
 
@@ -773,7 +780,7 @@ private:
     {
         if (x > 0.5f)
         {
-            return 0.7f + 0.3f * easeInSine((1-x) / 0.5f);
+            return 0.7f + 0.3f * (1-x) / 0.5f;
         }
         else
         {

@@ -101,6 +101,8 @@ public:
                     tile.index = 3;
                     break;
                 case 'G':
+                case 'b':
+                case 'w':
                     tile.index = 11;
                     break;
                 case 'W':
