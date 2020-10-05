@@ -16,6 +16,7 @@ struct WateringCan
 struct SeedBag {};
 
 struct Well {};
+struct TransportBox {};
 
 struct Parsnip {};
 

@@ -92,6 +92,10 @@ public:
             {
                 SpawnBuilding(x, y, BUILDING_INFO.at('W'), Well());
             }},
+            {'B', [&](int x, int y)
+            {
+                SpawnBuilding(x, y, BUILDING_INFO.at('B'), TransportBox());
+            }},
         }};
         m_level.LoadLevel("/Level.txt", levelCallbacks);
 
@@ -100,7 +104,7 @@ public:
             Position& pos = m_world.GetComponent<Position>(player);
             pos = m_playerSpawn;
             RigidBody& rigid = m_world.GetComponent<RigidBody>(player);
-            rigid.size = { 16, 16 };
+            rigid.size = { 15, 15 };
             rigid.entity = player;
             SpriteRenderer& renderer = m_world.GetComponent<SpriteRenderer>(player);
             renderer.size = { 16, 24};
@@ -176,7 +180,7 @@ public:
         ren.sprite = sprite;
         ren.size = {16, 16};
         RigidBody& rigid = m_world.GetComponent<RigidBody>(entity);
-        rigid.size = {16, 16};
+        rigid.size = {14, 14};
         rigid.entity = entity;
         T& t = m_world.GetComponent<T>(entity);
         t = type;
@@ -246,121 +250,143 @@ public:
             //Pickup drop
             if (input->GetKeyDown(tako::Key::L) || input->GetKeyDown(tako::Key::Gamepad_A))
             {
-                if (!player.heldObject)
+                bool didInteract = false;
+                m_world.IterateHandle<Position, Interactable>([&](tako::EntityHandle handle)
                 {
-                    m_world.IterateComps<Pickup>([&](Pickup& pickup)
+                    auto& interactable = m_world.GetComponent<Interactable>(handle.id);
+                    auto& iPos = m_world.GetComponent<Position>(handle.id);
+                    Rect interRect(iPos.x, iPos.y, interactable.w, interactable.h);
+                    if (!interRect.PointInside(interActX, interActY))
                     {
-                        if (player.heldObject)
-                        {
-                            return;
-                        }
-                        if (pickup.x != tileX || pickup.y != tileY)
-                        {
-                            return;
-                        }
+                        return;
+                    }
 
-                        player.heldObject = pickup.entity;
-                    });
-                    m_world.IterateHandle<Position, Interactable>([&](tako::EntityHandle handle)
+                    if (m_world.HasComponent<Well>(handle.id))
                     {
                         if (player.heldObject)
                         {
                             return;
                         }
-                        auto& interactable = m_world.GetComponent<Interactable>(handle.id);
-                        auto& iPos = m_world.GetComponent<Position>(handle.id);
-                        Rect interRect(iPos.x, iPos.y, interactable.w, interactable.h);
-                        if (!interRect.PointInside(interActX, interActY))
-                        {
-                            return;
-                        }
-
-                        if (m_world.HasComponent<Well>(handle.id))
-                        {
-                            player.heldObject = SpawnObject(tileX, tileY, m_waterCan, WateringCan());
-                        }
-                    });
-                    m_world.IterateComps<Crop>([&](Crop& crop)
-                    {
-                        if (player.heldObject)
-                        {
-                            return;
-                        }
-                        if (crop.tileX != tileX || crop.tileY != tileY)
-                        {
-                            return;
-                        }
-                        if (crop.stage == 4)
-                        {
-                            crop.stage = -69;
-                            player.heldObject = SpawnObject(tileX, tileY, m_parsnip, Parsnip());
-                            m_level.GetTile(tileX, tileY).value()->index = crop.watered ? 2 : 1;
-                            crop.watered = true;
-                        }
-                    });
-                    if (player.heldObject)
-                    {
-                        auto obj = player.heldObject.value();
+                        auto obj = SpawnObject(tileX, tileY, m_waterCan, WateringCan());
                         m_world.RemoveComponent<Position>(obj);
                         m_world.RemoveComponent<Pickup>(obj);
+                        player.heldObject = obj;
+                        didInteract = true;
                     }
-                }
-                else
+                    else if (m_world.HasComponent<TransportBox>(handle.id))
+                    {
+                        if (!player.heldObject)
+                        {
+                            return;
+                        }
+                        auto held = player.heldObject.value();
+                        if (m_world.HasComponent<Parsnip>(held))
+                        {
+                            m_world.Delete(held);
+                            player.heldObject = std::nullopt;
+                            didInteract = true;
+                        }
+                    }
+                });
+                if (!didInteract)
                 {
-                    // Find out if tile is free
-                    auto blocked = ((int) m_playerSpawn.x) / 16 == tileX && ((int) m_playerSpawn.y) / 16 == tileY;
-                    m_world.IterateComps<Pickup>([&](Pickup& pickup)
+                    if (!player.heldObject)
                     {
-                        if (blocked)
+                        m_world.IterateComps<Pickup>([&](Pickup& pickup)
                         {
-                            return;
-                        }
-                        if (pickup.x != tileX || pickup.y != tileY)
-                        {
-                            return;
-                        }
+                            if (player.heldObject)
+                            {
+                                return;
+                            }
+                            if (pickup.x != tileX || pickup.y != tileY)
+                            {
+                                return;
+                            }
 
-                        blocked = true;
-                    });
-                    if (!blocked)
-                    {
+                            player.heldObject = pickup.entity;
+                        });
                         m_world.IterateComps<Crop>([&](Crop& crop)
+                        {
+                            if (player.heldObject)
+                            {
+                                return;
+                            }
+                            if (crop.tileX != tileX || crop.tileY != tileY)
+                            {
+                                return;
+                            }
+                            if (crop.stage == 4)
+                            {
+                                crop.stage = -69;
+                                player.heldObject = SpawnObject(tileX, tileY, m_parsnip, Parsnip());
+                                m_level.GetTile(tileX, tileY).value()->index = crop.watered ? 2 : 1;
+                                crop.watered = true;
+                            }
+                        });
+                        if (player.heldObject)
+                        {
+                            auto obj = player.heldObject.value();
+                            m_world.RemoveComponent<Position>(obj);
+                            m_world.RemoveComponent<Pickup>(obj);
+                        }
+                    }
+                    else
+                    {
+                        // Find out if tile is free
+                        auto blocked = ((int) m_playerSpawn.x) / 16 == tileX && ((int) m_playerSpawn.y) / 16 == tileY;
+                        m_world.IterateComps<Pickup>([&](Pickup& pickup)
                         {
                             if (blocked)
                             {
                                 return;
                             }
-                            if (crop.tileX != tileX || crop.tileY != tileY || crop.stage <= 0)
+                            if (pickup.x != tileX || pickup.y != tileY)
                             {
                                 return;
                             }
 
                             blocked = true;
                         });
-                    }
+                        if (!blocked)
+                        {
+                            m_world.IterateComps<Crop>([&](Crop& crop)
+                            {
+                                if (blocked)
+                                {
+                                    return;
+                                }
+                                if (crop.tileX != tileX || crop.tileY != tileY || crop.stage <= 0)
+                                {
+                                    return;
+                                }
 
-                    if (!blocked)
-                    {
-                        auto obj = player.heldObject.value();
-                        m_world.AddComponent<Pickup>(obj);
-                        m_world.AddComponent<Position>(obj);
-                        Position& p = m_world.GetComponent<Position>(obj);
-                        p.x = tileX * 16 + 8;
-                        p.y = tileY * 16 + 8;
-                        Pickup& pickup = m_world.GetComponent<Pickup>(obj);
-                        pickup.x = tileX;
-                        pickup.y = tileY;
-                        pickup.entity = obj;
-                        player.heldObject = std::nullopt;
-                        Rect placed(p.x, p.y, 16, 16);
-                        Rect self(pos.x, pos.y, rigid.size.x, rigid.size.y);
-                        if (player.facing.x && Rect::OverlapX(self, placed))
-                        {
-                            pos.x += tako::mathf::sign(pos.x - p.x) * (16 - tako::mathf::abs(pos.x - p.x));
+                                blocked = true;
+                            });
                         }
-                        if (player.facing.y && Rect::OverlapY(self, placed))
+
+                        if (!blocked)
                         {
-                            pos.y += tako::mathf::sign(pos.y - p.y) * (16 - tako::mathf::abs(pos.y - p.y));
+                            auto obj = player.heldObject.value();
+                            m_world.AddComponent<Pickup>(obj);
+                            m_world.AddComponent<Position>(obj);
+                            Position& p = m_world.GetComponent<Position>(obj);
+                            p.x = tileX * 16 + 8;
+                            p.y = tileY * 16 + 8;
+                            Pickup& pickup = m_world.GetComponent<Pickup>(obj);
+                            pickup.x = tileX;
+                            pickup.y = tileY;
+                            pickup.entity = obj;
+                            player.heldObject = std::nullopt;
+                            Rect placed(p.x, p.y, 16, 16);
+                            Rect self(pos.x, pos.y, rigid.size.x, rigid.size.y);
+                            if (player.facing.x && Rect::OverlapX(self, placed))
+                            {
+                                pos.x += tako::mathf::sign(pos.x - p.x) * (16 - tako::mathf::abs(pos.x - p.x));
+                            }
+                            if (player.facing.y && Rect::OverlapY(self, placed))
+                            {
+                                pos.y += tako::mathf::sign(pos.y - p.y) * (16 - tako::mathf::abs(pos.y - p.y));
+                            }
                         }
                     }
                 }

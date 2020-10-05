@@ -7,7 +7,7 @@
 
 namespace
 {
-    constexpr auto tilesetTileCount = 16;
+    constexpr auto tilesetTileCount = 20;
 }
 
 struct BuildingSize
@@ -26,7 +26,8 @@ struct BuildingSize
 
 const std::map<char, BuildingSize> BUILDING_INFO =
 {{
-    {'W', {13, 2, 2}}
+    {'W', {13, 2, 2}},
+    {'B', {17, 2, 2}}
 }};
 
 struct Tile
@@ -103,6 +104,7 @@ public:
                     tile.index = 11;
                     break;
                 case 'W':
+                case 'B':
                     tile.index = BUILDING_INFO.at(tileChars[i]).startIndex;
                     tile.solid = true;
                     break;
@@ -207,9 +209,13 @@ public:
                 int tX = tileX + x;
                 int tY = tileY + y;
 
-                if (tX < 0 || tX > m_width || tY < 0 || tY > m_height)
+                if (tX < 0 || tX >= m_width || tY < 0 || tY >= m_height)
                 {
-                    continue;
+                    r = { tX * 16.0f + 8, tY * 16.0f + 8, 16, 16};
+                    if (Rect::Overlap(r, rect))
+                    {
+                        return r;
+                    }
                 }
                 int i = (m_height - tY) * m_width + tX;
                 if (!m_tiles[i].solid)
