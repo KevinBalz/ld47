@@ -64,6 +64,11 @@ public:
         m_waterCan = drawer->CreateSprite(resources->Load<tako::Texture>("/Watercan.png"), 0, 0, 16, 16);
         m_seedBag = drawer->CreateSprite(resources->Load<tako::Texture>("/SeedBag.png"), 0, 0, 16, 16);
         m_parsnip = drawer->CreateSprite(resources->Load<tako::Texture>("/Parsnip.png"), 0, 0, 16, 16);
+        auto playerBit = resources->Load<tako::Texture>("/Player.png");
+        for (int i = 0; i < m_playerSprites.size(); i++)
+        {
+            m_playerSprites[i] = drawer->CreateSprite(playerBit, i * 16, 0, 16, 24);
+        }
 
         m_level.Init(drawer, resources);
         InitGame();
@@ -91,15 +96,18 @@ public:
         m_level.LoadLevel("/Level.txt", levelCallbacks);
 
         {
-            auto player = m_world.Create<Position, RectangleRenderer, Player, RigidBody, Foreground, Camera>();
+            auto player = m_world.Create<Position, SpriteRenderer, AnimatedSprite, Player, RigidBody, Foreground, Camera>();
             Position& pos = m_world.GetComponent<Position>(player);
             pos = m_playerSpawn;
             RigidBody& rigid = m_world.GetComponent<RigidBody>(player);
             rigid.size = { 16, 16 };
             rigid.entity = player;
-            RectangleRenderer& renderer = m_world.GetComponent<RectangleRenderer>(player);
-            renderer.size = { 16, 16};
-            renderer.color = {0, 0, 0, 255};
+            SpriteRenderer& renderer = m_world.GetComponent<SpriteRenderer>(player);
+            renderer.size = { 16, 24};
+            renderer.sprite = m_playerSprites[0];
+            renderer.offset = {0, 8};
+            AnimatedSprite& anim = m_world.GetComponent<AnimatedSprite>(player);
+            anim.SetStatic(&m_playerSprites[0]);
             Player& play = m_world.GetComponent<Player>(player);
             play.facing = { 0, -1 };
             play.heldObject = std::nullopt;
@@ -133,7 +141,7 @@ public:
         pos.x = x * 16 + 8;
         pos.y = y * 16 + 8;
         Crop& cr = m_world.GetComponent<Crop>(crop);
-        cr.stage = 4;
+        cr.stage = 1;
         cr.watered = false;
         cr.stageHistory[m_currentDay] = cr.stage;
         for (int i = 0; i < m_currentDay; i++)
@@ -160,7 +168,7 @@ public:
     template<class T>
     tako::Entity SpawnObject(int x, int y, tako::Sprite* sprite, T type)
     {
-        auto entity = m_world.Create<Position, SpriteRenderer, RigidBody, Pickup, Foreground, T>();
+        auto entity = m_world.Create<Position, SpriteRenderer, RigidBody, Pickup, Background, T>();
         Position& pos = m_world.GetComponent<Position>(entity);
         pos.x = x * 16 + 8;
         pos.y = y * 16 + 8;
@@ -183,7 +191,7 @@ public:
 
     void Update(tako::Input* input, float dt)
     {
-        m_world.IterateComps<Position, Player, RigidBody>([&](Position& pos, Player& player, RigidBody& rigid)
+        m_world.IterateComps<Position, Player, RigidBody, SpriteRenderer, AnimatedSprite>([&](Position& pos, Player& player, RigidBody& rigid, SpriteRenderer& spriteRenderer, AnimatedSprite& anim)
         {
             tako::Vector2 moveVector;
             if (input->GetKey(tako::Key::Left) || input->GetKey(tako::Key::A) || input->GetKey(tako::Key::Gamepad_Dpad_Left))
@@ -202,22 +210,41 @@ public:
             {
                 moveVector.y -= 1;
             }
-            if (moveVector.magnitude() > 1)
+            auto moveMagnitude = moveVector.magnitude();
+            bool changedFacing = false;
+            if (moveMagnitude > 1)
             {
                 moveVector.normalize();
             }
-            else if (moveVector.magnitude() > 0)
+            else if (moveMagnitude > 0)
             {
-                player.facing = tako::Vector2::Normalized(moveVector);
+                auto newFace = tako::Vector2::Normalized(moveVector);
+                changedFacing = player.facing != newFace;
+                player.facing = newFace;
+                if (changedFacing)
+                {
+                    spriteRenderer.size.x = tako::mathf::sign(player.facing.x) * tako::mathf::abs(spriteRenderer.size.x);
+                }
             }
             Physics::Move(m_world, m_level, pos, rigid, moveVector * dt * 20);
+            if ((!player.wasMoving || changedFacing) && moveMagnitude > 0)
+            {
+                anim.SetAnim(0.3f, &m_playerSprites[GetIdleIndex(player.facing)], 4);
+                spriteRenderer.sprite = m_playerSprites[GetIdleIndex(player.facing)+1];
+                anim.passed = 0;
+            }
+            else if ((player.wasMoving || changedFacing) && moveMagnitude == 0)
+            {
+                anim.SetStatic(&m_playerSprites[GetIdleIndex(player.facing)]);
+            }
+            player.wasMoving = moveMagnitude > 0;
 
             float interActX = pos.x + player.facing.x * 12;
             float interActY = pos.y + player.facing.y * 12;
             int tileX = ((int) interActX) / 16;
             int tileY = ((int) interActY) / 16;
             //Pickup drop
-            if (input->GetKeyDown(tako::Key::L))
+            if (input->GetKeyDown(tako::Key::L) || input->GetKeyDown(tako::Key::Gamepad_A))
             {
                 if (!player.heldObject)
                 {
@@ -339,7 +366,7 @@ public:
                 }
             }
             // Use/interact
-            if (input->GetKeyDown(tako::Key::K))
+            if (input->GetKeyDown(tako::Key::K) || input->GetKeyDown(tako::Key::Gamepad_B))
             {
                 if (player.heldObject)
                 {
@@ -408,6 +435,30 @@ public:
             PassDay();
         }
         RerenderText(m_dayTimeLeftText, m_drawer, m_font, std::to_string((int) std::ceil(m_dayTimeLeft)));
+
+
+        m_world.IterateComps<SpriteRenderer, AnimatedSprite>([&](SpriteRenderer& sprite, AnimatedSprite& anim)
+        {
+            anim.passed += dt;
+            if (anim.passed >= anim.duration)
+            {
+                int index = 0;
+                while (index < anim.frames && anim.sprites[index] != sprite.sprite)
+                {
+                    index++;
+                }
+                index++;
+                if (index >= anim.frames)
+                {
+                    sprite.sprite = anim.sprites[0];
+                }
+                else
+                {
+                    sprite.sprite = anim.sprites[index];
+                }
+                anim.passed = 0;
+            }
+        });
     }
 
     void PassDay()
@@ -514,11 +565,11 @@ public:
         });
         m_world.IterateComps<Position, SpriteRenderer, Background>([&](Position& pos, SpriteRenderer& sprite, Background& b)
         {
-           drawer->DrawSprite(pos.x - sprite.size.x / 2, pos.y + sprite.size.y / 2, sprite.size.x, sprite.size.y, sprite.sprite, dayLightColor);
+           drawer->DrawSprite(pos.x - sprite.size.x / 2 + sprite.offset.x, pos.y + sprite.size.y / 2 + sprite.offset.y, sprite.size.x, sprite.size.y, sprite.sprite, dayLightColor);
         });
         m_world.IterateComps<Position, SpriteRenderer, Foreground>([&](Position& pos, SpriteRenderer& sprite, Foreground& f)
         {
-           drawer->DrawSprite(pos.x - sprite.size.x / 2, pos.y + sprite.size.y / 2, sprite.size.x, sprite.size.y, sprite.sprite, dayLightColor);
+           drawer->DrawSprite(pos.x - sprite.size.x / 2 + sprite.offset.x, pos.y + sprite.size.y / 2+ sprite.offset.y, sprite.size.x, sprite.size.y, sprite.sprite, dayLightColor);
         });
 
         if (m_currentDay > 0)
@@ -554,6 +605,7 @@ private:
     tako::Sprite* m_waterCan;
     tako::Sprite* m_seedBag;
     tako::Sprite* m_parsnip;
+    std::array<tako::Sprite*, 12> m_playerSprites;
     tako::PixelArtDrawer* m_drawer;
 
     float easeInSine(float x)
@@ -571,5 +623,19 @@ private:
         {
             return 0.4f + 0.6f * easeInSine(x / 0.5f);
         }
+    }
+
+    int GetIdleIndex(tako::Vector2 facing)
+    {
+        if (facing.x != 0)
+        {
+            return 4;
+        }
+        if (facing.y > 0)
+        {
+            return 8;
+        }
+
+        return 0;
     }
 };

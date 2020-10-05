@@ -6,4 +6,5 @@ struct Player
 {
     tako::Vector2 facing;
     std::optional<tako::Entity> heldObject;
+    bool wasMoving;
 };
