@@ -82,10 +82,14 @@ public:
         LoadClips();
 
         m_level.Init(drawer, resources);
+        std::map<char, std::function<void(int,int)>> dummyMap;
+        m_level.LoadLevel("/Level.txt", dummyMap);
 
         m_textPressAny = CreateText(drawer, m_font, "Press a button to start");
-
-        m_textEndScreen = CreateText(drawer, m_font, "You should not see this");
+        m_textTitle = CreateText(drawer, m_font, "HARVEST\nMINUTE");
+        m_textControls = CreateText(drawer, m_font, " WASD - Move\n  L/C - Pickup/Drop\n  K/X - Use held item\nEnter - Skip to end of day");
+        m_textCredits = CreateText(drawer, m_font, "Made in 72 hours by Malai\nLudum Dare 47 - Stuck in a loop\nPowered by tako");
+        m_textEndScreen = CreateText(drawer, m_font, "This is a bug");
     }
 
     void StartGame()
@@ -229,6 +233,12 @@ public:
                 if (GetAnyDown(input))
                 {
                     tako::Audio::Play(*m_clipMusic, true);
+                    m_screen = SCREEN::Title;
+                }
+                break;
+            case SCREEN::Title:
+                if (GetAnyDown(input))
+                {
                     StartGame();
                 }
                 break;
@@ -312,7 +322,7 @@ public:
             int tileX = ((int) interActX) / 16;
             int tileY = ((int) interActY) / 16;
             //Pickup drop
-            if (input->GetKeyDown(tako::Key::L) || input->GetKeyDown(tako::Key::Gamepad_A))
+            if (input->GetKeyDown(tako::Key::L) || input->GetKeyDown(tako::Key::C) || input->GetKeyDown(tako::Key::Gamepad_A))
             {
                 bool didInteract = false;
                 m_world.IterateHandle<Position, Interactable>([&](tako::EntityHandle handle)
@@ -503,7 +513,7 @@ public:
                 }
             }
             // Use/interact
-            if (input->GetKeyDown(tako::Key::K) || input->GetKeyDown(tako::Key::Gamepad_B))
+            if (input->GetKeyDown(tako::Key::K) || input->GetKeyDown(tako::Key::X) || input->GetKeyDown(tako::Key::Gamepad_B))
             {
                 if (player.heldObject)
                 {
@@ -730,6 +740,10 @@ public:
         {
             return DrawPressAny(drawer);
         }
+        if (m_screen == SCREEN::Title)
+        {
+            return DrawTitle(drawer);
+        }
         auto cameraSize = drawer->GetCameraViewSize();
         drawer->Clear();
         float colorGradient = dayTimeEasing(m_dayTimeLeft / DAY_LENGTH);
@@ -797,7 +811,24 @@ public:
         drawer->Clear();
         drawer->SetCameraPosition({0, 0});
         drawer->DrawImage(-m_textPressAny.size.x/2, m_textPressAny.size.y/2, m_textPressAny.size.x, m_textPressAny.size.y, m_textPressAny.texture);
-        return;
+    }
+
+    void DrawTitle(tako::PixelArtDrawer* drawer)
+    {
+        constexpr auto uiBackground = tako::Color(238, 195, 154, 255);
+        auto cameraSize = drawer->GetCameraViewSize();
+        drawer->Clear();
+        drawer->SetCameraPosition(FitMapBound(m_level.MapBounds(), {170, 180}, cameraSize));
+        m_level.Draw(drawer);
+        drawer->SetCameraPosition({0, 0});
+        constexpr auto titleScale = 3;
+        auto renPos = tako::Vector2(m_textTitle.size.x * titleScale * -0.5f, m_textTitle.size.y * titleScale * 0.5f + 40);
+        drawer->DrawRectangle(renPos.x - 8, renPos.y + 8, m_textTitle.size.x * titleScale + 16, m_textTitle.size.y * titleScale + 16, uiBackground);
+        drawer->DrawImage(renPos.x, renPos.y, m_textTitle.size.x * titleScale, m_textTitle.size.y * titleScale, m_textTitle.texture, {0, 0, 0, 255});
+
+        drawer->DrawImage(m_textControls.size.x / -2 , m_textControls.size.y / 2 - 25, m_textControls.size.x, m_textControls.size.y, m_textControls.texture, {0, 0, 0, 255});
+        drawer->SetCameraPosition(cameraSize/2);
+        drawer->DrawImage(4, m_textCredits.size.y + 4, m_textCredits.size.x, m_textCredits.size.y, m_textCredits.texture, {0, 0, 0, 255});
     }
 private:
     SCREEN m_screen = SCREEN::PressAny;
@@ -834,6 +865,9 @@ private:
     tako::AudioClip* m_clipWater;
 
     Text m_textPressAny;
+    Text m_textTitle;
+    Text m_textControls;
+    Text m_textCredits;
     Text m_textEndScreen;
 
     void LoadClips()
