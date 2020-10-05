@@ -148,7 +148,7 @@ public:
         pos.x = x * 16 + 8;
         pos.y = y * 16 + 8;
         Crop& cr = m_world.GetComponent<Crop>(crop);
-        cr.stage = 4;
+        cr.stage = 1;
         cr.watered = false;
         cr.stageHistory[m_currentDay] = cr.stage;
         for (int i = 0; i < m_currentDay; i++)
