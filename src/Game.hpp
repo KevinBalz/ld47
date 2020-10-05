@@ -9,6 +9,7 @@
 #include "Crop.hpp"
 #include "Level.hpp"
 #include "Objects.hpp"
+#include <sstream>
 
 constexpr auto DAY_LENGTH = 60.0f;
 
@@ -16,6 +17,14 @@ struct Text
 {
     tako::Texture* texture;
     tako::Vector2 size;
+};
+
+enum class SCREEN
+{
+    PressAny,
+    Title,
+    Game,
+    EndScreen
 };
 
 struct Camera {};
@@ -73,13 +82,15 @@ public:
         LoadClips();
 
         m_level.Init(drawer, resources);
-        StartGame();
+
+        m_textPressAny = CreateText(drawer, m_font, "Press a button to start");
+
+        m_textEndScreen = CreateText(drawer, m_font, "You should not see this");
     }
 
     void StartGame()
     {
         InitGame();
-        tako::Audio::Play(*m_clipMusic, true);
     }
 
     void InitGame()
@@ -139,6 +150,7 @@ public:
         m_dayTimeLeftText = CreateText(m_drawer, m_font, std::to_string(m_dayTimeLeft));
         m_parsnipCount = m_parsnipCountPrev = m_parsnipCountSafe = 0;
         m_parsnipText = CreateText(m_drawer, m_font, std::to_string(m_parsnipCount));
+        m_screen = SCREEN::Game;
     }
 
     template<class T>
@@ -209,14 +221,44 @@ public:
         return entity;
     }
 
-
     void Update(tako::Input* input, float dt)
     {
-        if (input->GetKeyDown(tako::Key::Space))
+        switch (m_screen)
         {
-            InitGame();
-            return;
+            case SCREEN::PressAny:
+                if (GetAnyDown(input))
+                {
+                    tako::Audio::Play(*m_clipMusic, true);
+                    StartGame();
+                }
+                break;
+            case SCREEN::Game:
+                GameUpdate(input, dt);
+                break;
+            case SCREEN::EndScreen:
+                if (input->GetKeyDown(tako::Key::Enter) || input->GetKeyDown(tako::Key::Gamepad_Start))
+                {
+                    InitGame();
+                }
+                break;
         }
+    }
+
+    bool GetAnyDown(tako::Input* input)
+    {
+        for (int i = 0; i < (int) tako::Key::Unknown; i++)
+        {
+            if (input->GetKeyDown((tako::Key) i))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    void GameUpdate(tako::Input* input, float dt)
+    {
         m_world.IterateComps<Position, Player, RigidBody, SpriteRenderer, AnimatedSprite>([&](Position& pos, Player& player, RigidBody& rigid, SpriteRenderer& spriteRenderer, AnimatedSprite& anim)
         {
             tako::Vector2 moveVector;
@@ -589,10 +631,6 @@ public:
 
     void PassDay()
     {
-        if (m_currentDay == TOTAL_DAYS)
-        {
-            return;
-        }
         bool allWatered = true;
         m_world.IterateComps<Crop>([&](Crop& crop)
         {
@@ -625,11 +663,18 @@ public:
         std::vector<tako::Entity> clearCrop;
         if (allWatered)
         {
+            tako::Audio::Play(*m_clipDay);
+            if (m_currentDay == TOTAL_DAYS)
+            {
+                m_dayTimeLeft = 0;
+                m_screen = SCREEN::EndScreen;
+                RenderEndText();
+                return;
+            }
             m_currentDay++;
             m_parsnipCountPrev = m_parsnipCount;
             m_parsnipCountSafe = 0;
             RerenderText(m_currentDayText, m_drawer, m_font, "Day " + std::to_string(m_currentDay));
-            tako::Audio::Play(*m_clipDay);
         }
         else
         {
@@ -668,9 +713,12 @@ public:
             m_world.Delete(ent);
         }
         m_level.ResetWatered();
-        for (auto [pos, player]: m_world.Iter<Position, Player>())
+        for (auto [pos, player, anim]: m_world.Iter<Position, Player, AnimatedSprite>())
         {
             pos = m_playerSpawn;
+            player.wasMoving = false;
+            player.facing = { 0, -1 };
+            anim.SetStatic(&m_playerSprites[0]);
         }
         m_dayTimeLeft = DAY_LENGTH;
     }
@@ -678,8 +726,11 @@ public:
 
     void Draw(tako::PixelArtDrawer* drawer)
     {
+        if (m_screen == SCREEN::PressAny)
+        {
+            return DrawPressAny(drawer);
+        }
         auto cameraSize = drawer->GetCameraViewSize();
-        drawer->SetClearColor({255, 255, 255, 255});
         drawer->Clear();
         float colorGradient = dayTimeEasing(m_dayTimeLeft / DAY_LENGTH);
         tako::Color dayLightColor(255 * colorGradient, 255 * colorGradient, 255 * colorGradient, 255);
@@ -707,10 +758,11 @@ public:
            drawer->DrawSprite(pos.x - sprite.size.x / 2 + sprite.offset.x, pos.y + sprite.size.y / 2+ sprite.offset.y, sprite.size.x, sprite.size.y, sprite.sprite, dayLightColor);
         });
 
-        if (m_currentDay > 0)
+        constexpr auto uiBackground = tako::Color(238, 195, 154, 255);
+        if (m_screen == SCREEN::Game)
         {
             drawer->SetCameraPosition(cameraSize / 2);
-            constexpr auto uiBackground = tako::Color(238, 195, 154, 255);
+
             drawer->DrawRectangle(0, cameraSize.y, 60, 28, uiBackground);
             drawer->DrawImage(4, cameraSize.y - 4, m_currentDayText.size.x, m_currentDayText.size.y, m_currentDayText.texture, {0, 0, 0, 255});
 
@@ -731,8 +783,24 @@ public:
             auto timerColor = m_dayTimeLeft > 10 ? tako::Color(0, 0, 0, 255) : tako::Color(255, 0, 0, 255);
             drawer->DrawImage(6, cameraSize.y - 32, m_dayTimeLeftText.size.x, m_dayTimeLeftText.size.y, m_dayTimeLeftText.texture, timerColor);
         }
+        if (m_screen == SCREEN::EndScreen)
+        {
+            drawer->SetCameraPosition({0, 0});
+            auto renPos = tako::Vector2(m_textEndScreen.size.x * -0.5f, m_textEndScreen.size.y * 0.5f);
+            drawer->DrawRectangle(renPos.x - 4, renPos.y + 4, m_textEndScreen.size.x + 8, m_textEndScreen.size.y + 8, uiBackground);
+            drawer->DrawImage(renPos.x, renPos.y, m_textEndScreen.size.x, m_textEndScreen.size.y, m_textEndScreen.texture, {0, 0, 0, 255});
+        }
+    }
+
+    void DrawPressAny(tako::PixelArtDrawer* drawer)
+    {
+        drawer->Clear();
+        drawer->SetCameraPosition({0, 0});
+        drawer->DrawImage(-m_textPressAny.size.x/2, m_textPressAny.size.y/2, m_textPressAny.size.x, m_textPressAny.size.y, m_textPressAny.texture);
+        return;
     }
 private:
+    SCREEN m_screen = SCREEN::PressAny;
     int m_currentDay = 0;
     float m_dayTimeLeft;
     int m_dayTimeLeftPrev;
@@ -765,6 +833,9 @@ private:
     tako::AudioClip* m_clipTick;
     tako::AudioClip* m_clipWater;
 
+    Text m_textPressAny;
+    Text m_textEndScreen;
+
     void LoadClips()
     {
         m_clipDay = new tako::AudioClip("/Day.wav");
@@ -779,6 +850,16 @@ private:
         m_clipSplash = new tako::AudioClip("/Splash.wav");
         m_clipTick = new tako::AudioClip("/Tick.wav");
         m_clipWater = new tako::AudioClip("/Water.wav");
+    }
+
+    void RenderEndText()
+    {
+        std::stringstream str;
+        str << "You harvested and sold\n"
+            << m_parsnipCount << " parsnips!\n"
+            << "Thanks for playing my LD 47 game!\n"
+            << "Enter/Start to play again";
+        RerenderText(m_textEndScreen, m_drawer, m_font, str.str());
     }
 
     float easeInSine(float x)
